@@ -1,5 +1,9 @@
 package com.ansub.tvhome;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
@@ -37,8 +41,12 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -50,6 +58,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.List;
 
@@ -88,10 +97,13 @@ public class MainActivity extends Activity {
     private static final String TCL_SHOW_WINDOW = "com.tcl.settings.SHOW_WINDOW";
 
     // Layout is designed at 1920x1080 and scaled to the TV's real UI size by px().
-    private static final int MARGIN = 96, GAP = 36, RADIUS = 22;
-    private static final int ROW1_TOP = 604, ROW_STEP = 224;
-    private static final int GRID_MIN_TOP = 400; // more rows push the grid up, but not into the clock
-    private static final int ICON_TOP = 76, ICON_BUTTON = 72, ICON_SIZE = 40, ICON_GAP = 12; // level with the date
+    private static final int MARGIN = 96, RADIUS = 22;
+    // The apps are one row that slides sideways: tile size and gap, where the row sits, how far down
+    // inside it the tiles start, and how far the others slide away from the focused one.
+    private static final int TILE_W = 248, TILE_H = 140, TILE_GAP = 32;
+    private static final int ROW_TOP = 540, ROW_H = 300, TILE_IN = 45, PUSH = 26;
+    private static final float POP_SCALE = 1.26f; // how much bigger the focused app grows
+    private static final int ICON_TOP = 88, ICON_BUTTON = 72, ICON_SIZE = 40, ICON_GAP = 12; // level with the date
 
     // The Settings tile opens a small menu: the home screen's own settings, then the TV's.
     private static final String[] SETTINGS_ITEMS = {"Wallpaper", "TV settings"};
@@ -100,7 +112,7 @@ public class MainActivity extends Activity {
     // white labels stay easy to read. Only colours, no images, so every one costs the same as Dusk,
     // the default.
     private static final String[] WALLPAPER_NAMES = {"Dusk", "Midnight", "Plum", "Forest", "Graphite", "Ocean", "Ember",
-            "Sunset", "Lagoon", "Aurora", "Coral", "Iris", "Meadow", "Gold"};
+            "Noir", "Fjord", "Nordlys", "Sunset", "Lagoon", "Aurora", "Coral", "Iris", "Meadow", "Gold"};
     private static final int[][] WALLPAPERS = {
         {0xFF15100F, 0xFF0A0809, 0xFF050405, 0x36FF8048, 0x2EAA3C8C},
         {0xFF0E1220, 0xFF080A13, 0xFF040509, 0x384A6CFF, 0x2E5A3CC8},
@@ -109,6 +121,10 @@ public class MainActivity extends Activity {
         {0xFF151617, 0xFF0B0C0D, 0xFF050506, 0x1CFFFFFF, 0x16A0B4C8},
         {0xFF0A1517, 0xFF060C0E, 0xFF030607, 0x3426B4C8, 0x2E2A64C0},
         {0xFF190D08, 0xFF0D0605, 0xFF060303, 0x40FF5A24, 0x32C8283C},
+        // Noir: near-black with a faint cool light. Fjord: deep blue-green water. Nordlys: northern lights.
+        {0xFF0D0D0F, 0xFF070708, 0xFF020203, 0x22FFFFFF, 0x143C4650},
+        {0xFF0B1B26, 0xFF08121C, 0xFF03070C, 0x4030A0C8, 0x2E3C64B4},
+        {0xFF07161A, 0xFF08100F, 0xFF030606, 0x4040E0A0, 0x388C50E6},
         {0xFF8C3A5E, 0xFF5E2348, 0xFF22101E, 0xA0FF8A4C, 0x80E0457A},
         {0xFF14588E, 0xFF15366E, 0xFF0A1632, 0x9030C8E0, 0x807A4CE0},
         {0xFF0F4048, 0xFF0F2E3A, 0xFF08141C, 0x9038E0A0, 0x90A050F0},
@@ -119,10 +135,29 @@ public class MainActivity extends Activity {
     };
     private float scale = 1f;
 
+    // Focus pops with a small overshoot and settles; letting go eases back. These are one-shot
+    // animations only, so nothing runs while the TV sits idle.
+    private static final Interpolator POP = new OvershootInterpolator(1.7f);
+    private static final Interpolator EASE = new DecelerateInterpolator(1.5f);
+    private boolean entered; // the tiles have already risen into place once
+    private boolean intro;   // the first spring-up is still playing
+
     private static Typeface regular, semibold;
 
     private FrameLayout root; // the page, inside a vertical scroller
-    private int tileW, tileH, gridTop; // app grid geometry, set by buildTiles
+    private int tileW, tileH; // app tile size, set by buildTiles
+    private HorizontalScrollView appsScroll; // the sideways app row...
+    private FrameLayout appsRow;             // ...and what's inside it
+    private LinearLayout dock;               // inputs, Settings and Add app
+    private TextView sectionLabel, nameText, countText, credit;
+    // The soft glow behind the apps. It takes the colour of the focused app and moves to sit behind it.
+    private GradientDrawable tintGlow;
+    private ValueAnimator tintAnim;
+    private int tintColor;
+    private float tintX = 0.22f;
+    private final ArgbEvaluator argb = new ArgbEvaluator();
+    private final HashMap<String, Integer> tints = new HashMap<>(); // glow colour per app
+    private final HashMap<String, String> names = new HashMap<>();  // what the header says per tile
     private final List<View> tiles = new ArrayList<>();
     private boolean dirty = true;
     private java.util.Locale shownLocale; // the TV's language (and region) when the page was built
@@ -188,11 +223,15 @@ public class MainActivity extends Activity {
         tp.topMargin = px(-20); // pull the big digits up under the date
         clock.addView(time, tp);
         root.addView(clock, at(px(MARGIN), px(92), -2, -2));
+        clock.setAlpha(0f);
+        clock.animate().alpha(1f).setDuration(600).setInterpolator(EASE).start();
 
         moveHint = text(px(24), 0xA8FFFFFF, regular);
         moveHint.setText(Strings.t("Use the arrows to move it, then press OK"));
         moveHint.setVisibility(View.GONE);
-        root.addView(moveHint, at(px(MARGIN), px(ROW1_TOP - 64), -2, -2));
+        root.addView(moveHint, at(px(MARGIN), px(522), -2, -2));
+
+        buildChrome();
 
         setContentView(scroller);
 
@@ -224,6 +263,7 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         if (saveConfig(intent)) buildTiles();
+        if (credit != null) credit.setText(creditText());
     }
 
     // Saves an app list passed with --es apps "..." and shortcuts passed with --es quick "...".
@@ -233,7 +273,8 @@ public class MainActivity extends Activity {
     private boolean saveConfig(Intent intent) {
         String apps = intent == null ? null : intent.getStringExtra("apps");
         String quick = intent == null ? null : intent.getStringExtra("quick");
-        if (apps == null && quick == null) return false;
+        String small = intent == null ? null : intent.getStringExtra("credit");
+        if (apps == null && quick == null && small == null) return false;
         SharedPreferences prefs = getSharedPreferences(PREFS, 0);
         String stamp = intent.getStringExtra("stamp");
         if (stamp != null && stamp.equals(prefs.getString("stamp", null))) return false;
@@ -248,6 +289,11 @@ public class MainActivity extends Activity {
             quick = quick.trim();
             if (quick.isEmpty() || quick.equalsIgnoreCase("none")) e.remove("quick");
             else e.putString("quick", quick);
+        }
+        if (small != null) {
+            small = small.trim();
+            if (small.isEmpty()) e.remove("credit");
+            else e.putString("credit", small);
         }
         e.apply();
         dirty = true;
@@ -286,6 +332,9 @@ public class MainActivity extends Activity {
         refreshNetwork();
         View f = getCurrentFocus();
         if (f == null && !tiles.isEmpty()) tiles.get(0).requestFocus();
+        // On the first start the page isn't attached to the window yet, so Android doesn't announce the
+        // first focus; catch up once it is.
+        root.post(this::syncFocus);
     }
 
     // Back from a menu or a window on top (like the uninstall prompt): catch up on apps that changed.
@@ -320,8 +369,10 @@ public class MainActivity extends Activity {
                 new int[] {c[0], c[1], c[2]});
         GradientDrawable top = radial(c[3], 0.08f, -0.12f, px(1250));
         GradientDrawable bottom = radial(c[4], 1.0f, 1.1f, px(1000));
-        for (GradientDrawable g : new GradientDrawable[] {base, top, bottom}) g.setDither(true);
-        return new LayerDrawable(new Drawable[] {base, top, bottom});
+        // The glow that follows the focused app. Made once and kept, so it survives a wallpaper change.
+        if (tintGlow == null) tintGlow = radial(0x00000000, tintX, 0.66f, px(820));
+        for (GradientDrawable g : new GradientDrawable[] {base, top, bottom, tintGlow}) g.setDither(true);
+        return new LayerDrawable(new Drawable[] {base, top, bottom, tintGlow});
     }
 
     // The saved wallpaper, as an index into WALLPAPERS (Dusk if none is saved).
@@ -370,6 +421,77 @@ public class MainActivity extends Activity {
         return g;
     }
 
+    // The header above the apps, the sideways app row, the dock, the key hints and the small print.
+    private void buildChrome() {
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int m = px(MARGIN);
+
+        sectionLabel = text(px(20), 0x9EFFFFFF, semibold);
+        sectionLabel.setLetterSpacing(0.16f);
+        root.addView(sectionLabel, at(m, px(424), -2, -2));
+        nameText = text(px(54), Color.WHITE, semibold);
+        nameText.setSingleLine(true);
+        root.addView(nameText, at(m, px(452), px(1250), -2));
+        countText = text(px(20), 0x9EFFFFFF, semibold);
+        countText.setGravity(Gravity.END);
+        root.addView(countText, at(screenW - m - px(420), px(424), px(420), -2));
+
+        // The apps: one row that slides sideways. The fading edge is also the margin it keeps from the
+        // screen edge, so the next app always peeks in.
+        appsScroll = new HorizontalScrollView(this);
+        appsScroll.setHorizontalScrollBarEnabled(false);
+        appsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        appsScroll.setClipChildren(false);
+        appsScroll.setClipToPadding(false);
+        appsScroll.setHorizontalFadingEdgeEnabled(true);
+        appsScroll.setFadingEdgeLength(px(150));
+        appsRow = new FrameLayout(this);
+        appsRow.setClipChildren(false);
+        appsScroll.addView(appsRow, new FrameLayout.LayoutParams(-2, -1));
+        root.addView(appsScroll, at(0, px(ROW_TOP), screenW, px(ROW_H)));
+
+        // The dock: inputs, Settings and Add app, in one soft pill.
+        dock = new LinearLayout(this);
+        dock.setOrientation(LinearLayout.HORIZONTAL);
+        dock.setGravity(Gravity.CENTER_VERTICAL);
+        dock.setPadding(px(10), 0, px(10), 0);
+        GradientDrawable dockBg = new GradientDrawable();
+        dockBg.setCornerRadius(px(42));
+        dockBg.setColor(0x12FFFFFF);
+        dockBg.setStroke(Math.max(1, px(2)), 0x1FFFFFFF);
+        dock.setBackground(dockBg);
+        root.addView(dock, at(m, px(896), -2, px(84)));
+        dock.setAlpha(0f);
+        dock.animate().alpha(1f).setStartDelay(500).setDuration(600).setInterpolator(EASE).start();
+
+        TextView hint = text(px(20), 0x99FFFFFF, semibold);
+        hint.setText("← →  Browse        OK  Open        Hold OK  Move");
+        hint.setGravity(Gravity.END);
+        root.addView(hint, at(screenW - m - px(924), px(1012), px(924), -2));
+        hint.setAlpha(0f);
+        hint.animate().alpha(1f).setStartDelay(1100).setDuration(700).start();
+
+        // The small print: press OK for a surprise, hold OK to change the text.
+        credit = text(px(18), 0x80FFFFFF, regular);
+        credit.setText(creditText());
+        credit.setSingleLine(true);
+        credit.setFocusable(true);
+        credit.setPadding(px(12), px(8), px(12), px(8));
+        credit.setOnClickListener(v -> surprise());
+        credit.setOnLongClickListener(v -> { editCredit(); return true; });
+        credit.setOnFocusChangeListener((v, has) -> {
+            credit.setTextColor(has ? 0xFFFFFFFF : 0x80FFFFFF);
+            credit.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f).setStartDelay(0)
+                    .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
+        });
+        root.addView(credit, at(m - px(12), px(1000), -2, -2));
+        credit.setAlpha(0f);
+        credit.animate().alpha(1f).setStartDelay(1100).setDuration(700).start();
+
+        // One place that follows focus: the header, the glow behind the apps and how the row opens up.
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> onFocusMoved(newF));
+    }
+
     private void buildTiles() {
         // While tiles are swapped out, removing the focused one would hand focus down the row (and
         // overwrite focusedKey), so hold focus off until the new tiles are in.
@@ -382,27 +504,18 @@ public class MainActivity extends Activity {
         }
         tiles.clear();
         rowApps.clear();
+        tints.clear();
+        names.clear();
         movingKey = null;
         moveHint.setVisibility(View.GONE);
 
         PackageManager pm = getPackageManager();
-        int m = px(MARGIN), g = px(GAP);
-        int w = (getResources().getDisplayMetrics().widthPixels - 2 * m - g * (PER_ROW - 1)) / PER_ROW;
-        int h = w * 9 / 16;
+        int m = px(MARGIN), g = px(TILE_GAP), w = px(TILE_W), h = px(TILE_H);
         tileW = w;
         tileH = h;
+        root.setMinimumHeight(px(1080));
 
         List<String> apps = appList(pm);
-        // Apps fill rows of six. With more rows the grid starts higher, so up to two rows of apps and
-        // the bottom row still fit on screen; past that the page scrolls.
-        int launchable = 0;
-        for (String pkg : apps) if (launchIntent(pm, pkg) != null) launchable++;
-        int rows = Math.max(1, (launchable + PER_ROW - 1) / PER_ROW);
-        gridTop = Math.max(px(GRID_MIN_TOP), px(ROW1_TOP) - (rows - 1) * px(ROW_STEP));
-        int bottomTop = gridTop + rows * px(ROW_STEP);
-        ((FrameLayout.LayoutParams) moveHint.getLayoutParams()).topMargin = gridTop - px(64);
-        root.setMinimumHeight(bottomTop + h + px(MARGIN));
-
         for (String pkg : apps) {
             Intent li = launchIntent(pm, pkg);
             if (li == null) continue;
@@ -411,36 +524,32 @@ public class MainActivity extends Activity {
                 banner = pm.getActivityBanner(li);
                 if (banner == null) banner = pm.getApplicationBanner(pkg);
             } catch (Exception ignored) {}
-            String label = pkg;
-            try { label = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString(); } catch (Exception ignored) {}
+            String label = labelOf(pkg);
             // Apps without a TV banner get a plain tile with their normal icon.
             Drawable icon = null;
             if (banner == null) try { icon = pm.getApplicationIcon(pkg); } catch (Exception ignored) {}
             int i = rowApps.size();
             rowApps.add(pkg);
-            addTile(root, pkg, label, banner, null, icon, gridX(i), gridY(i), w, h);
+            names.put(pkg, label);
+            addTile(appsRow, pkg, label, banner, null, icon, gridX(i), gridY(i), w, h);
         }
+        appsRow.setMinimumWidth(m + rowApps.size() * (w + g) - g + m);
 
-        // Bottom row: Play Store, HDMI inputs, Settings and Add app, six at most.
-        int col = 0;
+        // The dock: Play Store, HDMI inputs, Settings and Add app.
         boolean store = !apps.contains(PLAY_STORE) && launchIntent(pm, PLAY_STORE) != null;
         List<TvInputInfo> inputs = hdmiInputs();
-        int room = PER_ROW - 2 - (store ? 1 : 0);
+        int room = 4 - (store ? 1 : 0);
         if (inputs.size() > room) inputs = inputs.subList(0, room);
-        if (store)
-            addTile(root, PLAY_STORE, "Play Store", null, LineIcon.PLAY, null, m + col++ * (w + g), bottomTop, w, h);
-        for (TvInputInfo in : inputs)
-            addTile(root, in.getId(), inputLabel(in), null, LineIcon.HDMI, null, m + col++ * (w + g), bottomTop, w, h);
-        addTile(root, SETTINGS, Strings.t("Settings"), null, LineIcon.SETTINGS, null, m + col++ * (w + g), bottomTop, w, h);
-        addTile(root, ADD, Strings.t("Add app"), null, LineIcon.PLUS, null, m + col * (w + g), bottomTop, w, h);
+        if (store) addPill(PLAY_STORE, "Play Store", LineIcon.PLAY);
+        for (TvInputInfo in : inputs) addPill(in.getId(), inputLabel(in), LineIcon.HDMI);
+        addPill(SETTINGS, Strings.t("Settings"), LineIcon.SETTINGS);
+        addPill(ADD, Strings.t("Add app"), LineIcon.PLUS);
 
-        // Plain icons at the top right, level with the date: any settings shortcuts picked, then the
-        // network icon. Added last, so the first app keeps first focus; Up from the apps reaches them.
+        // Round icons at the top right, level with the date: any settings shortcuts, then the network
+        // icon. Added last, so the first app keeps first focus; Up from the apps reaches them.
         List<Integer> quick = quickList();
         int ib = px(ICON_BUTTON), ig = px(ICON_GAP);
-        // The last icon's right edge lines up with the apps' (its focus circle sticks out past them).
-        int qx = getResources().getDisplayMetrics().widthPixels - m + (ib - px(ICON_SIZE)) / 2
-                - (quick.size() + 1) * ib - quick.size() * ig;
+        int qx = getResources().getDisplayMetrics().widthPixels - m - (quick.size() + 1) * ib - quick.size() * ig;
         for (int q : quick) {
             addIcon(QUICK + QUICK_NAMES[q], Strings.t(QUICK_LABELS[q]), new LineIcon(QUICK_ICONS[q]), qx);
             qx += ib + ig;
@@ -448,6 +557,29 @@ public class MainActivity extends Activity {
         netIcon = addIcon(NETWORK, Strings.t("Network"), null, qx);
         netState = -1;
         refreshNetwork();
+
+        // The first time the page is built, everything springs up into place, one after another
+        // (about a second and a half in all). Rebuilds after that, like an app being installed, don't
+        // replay it. While it plays the row holds off dimming and opening up.
+        if (!entered) {
+            entered = true;
+            intro = true;
+            int rise = px(70), k = 0;
+            for (View t : tiles) {
+                View wrap = (View) t.getParent();
+                wrap.setAlpha(0f);
+                wrap.setTranslationY(rise);
+                wrap.setScaleX(0.88f);
+                wrap.setScaleY(0.88f);
+                wrap.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                        .setStartDelay(150 + Math.min(k++, 14) * 55L).setDuration(560).setInterpolator(POP)
+                        .withLayer().start();
+            }
+            root.postDelayed(() -> {
+                intro = false;
+                syncFocus();
+            }, 1600);
+        }
 
         root.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         // An app that was uninstalled hands focus to the one now in its place, as Remove does.
@@ -459,14 +591,16 @@ public class MainActivity extends Activity {
     }
 
     private void addTile(ViewGroup parent, final String key, String label, Drawable banner, int[] lineIcon, Drawable appIcon,
-                         int x, int y, int w, int h) {
+                         int x, int y, final int w, int h) {
         FrameLayout card = new FrameLayout(this);
         final GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(px(RADIUS));
+        Drawable art = null; // the picture as drawn, for the colour of the glow behind it
         if (banner != null) {
             bg.setColor(0xFF1E1A1C);
             ImageView iv = new ImageView(this);
-            iv.setImageDrawable(fit(banner, w, h));
+            art = fit(banner, w, h);
+            iv.setImageDrawable(art);
             card.addView(iv, new FrameLayout.LayoutParams(-1, -1));
         } else {
             // Quiet "glass" tile: icon above label.
@@ -476,41 +610,60 @@ public class MainActivity extends Activity {
             inner.setOrientation(LinearLayout.VERTICAL);
             inner.setGravity(Gravity.CENTER);
             ImageView iv = new ImageView(this);
-            int size = lineIcon != null ? px(44) : px(64);
+            int size = lineIcon != null ? px(44) : px(60);
             if (lineIcon != null) iv.setImageDrawable(new LineIcon(lineIcon));
-            else if (appIcon != null) iv.setImageDrawable(fit(appIcon, size, size));
+            else if (appIcon != null) {
+                art = fit(appIcon, size, size);
+                iv.setImageDrawable(art);
+            }
             inner.addView(iv, new LinearLayout.LayoutParams(size, size));
-            TextView t = text(px(24), 0xE0FFFFFF, regular);
+            TextView t = text(px(22), 0xE0FFFFFF, regular);
             t.setText(label);
             t.setSingleLine(true);
             t.setEllipsize(android.text.TextUtils.TruncateAt.END);
             t.setGravity(Gravity.CENTER);
             t.setPadding(px(16), 0, px(16), 0);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.topMargin = px(12);
+            lp.topMargin = px(10);
             inner.addView(t, lp);
             card.addView(inner, new FrameLayout.LayoutParams(-1, -1));
         }
         card.setBackground(bg);
         card.setClipToOutline(true);
+
+        int tint = tintOf(art);
+        if (tint != 0) {
+            tints.put(key, tint);
+            // From Android 9 the shadow under a lifted tile takes the app's colour too.
+            if (android.os.Build.VERSION.SDK_INT >= 28) card.setOutlineSpotShadowColor(tint | 0xFF000000);
+        }
+
+        // A soft band of light that crosses the tile once when it gets focus, and a thin light ring.
+        // Both sit on top of the picture, inside the tile's rounded clip.
+        final int sw = w / 3;
+        final View shine = new View(this);
+        shine.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] {0x00FFFFFF, 0x44FFFFFF, 0x00FFFFFF}));
+        shine.setAlpha(0f);
+        card.addView(shine, new FrameLayout.LayoutParams(sw, -1));
+        final View ring = new View(this);
+        GradientDrawable ringShape = new GradientDrawable();
+        ringShape.setCornerRadius(px(RADIUS));
+        ringShape.setStroke(Math.max(2, px(3)), 0xF2FFFFFF);
+        ring.setBackground(ringShape);
+        ring.setAlpha(0f);
+        card.addView(ring, new FrameLayout.LayoutParams(-1, -1));
         card.setFocusable(true);
         card.setTag(key);
-
-        // Banner tiles show their name underneath when focused.
-        final TextView caption = banner == null ? null : text(px(24), Color.WHITE, regular);
-        if (caption != null) {
-            caption.setText(label);
-            caption.setGravity(Gravity.CENTER_HORIZONTAL);
-            caption.setVisibility(View.INVISIBLE);
-        }
 
         final boolean glass = banner == null;
         card.setOnFocusChangeListener((v, has) -> {
             if (has) focusedKey = key;
             if (glass) bg.setColor(has ? 0x38FFFFFF : 0x13FFFFFF);
-            v.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f).translationZ(has ? px(26) : 0)
-                    .setDuration(140).withLayer().start();
-            if (caption != null) caption.setVisibility(has ? View.VISIBLE : View.INVISIBLE);
+            v.animate().scaleX(has ? POP_SCALE : 1f).scaleY(has ? POP_SCALE : 1f).translationZ(has ? px(26) : 0)
+                    .setStartDelay(0).setDuration(has ? 300 : 200).setInterpolator(has ? POP : EASE).withLayer().start();
+            ring.animate().alpha(has ? 1f : 0f).setStartDelay(0).setDuration(has ? 200 : 140).start();
+            if (has && !intro) sweep(shine, sw, w);
         });
         final boolean editable = rowApps.contains(key);
         card.setOnClickListener(v -> open(key));
@@ -547,22 +700,59 @@ public class MainActivity extends Activity {
         FrameLayout wrap = new FrameLayout(this);
         wrap.setClipChildren(false);
         wrap.addView(card, new FrameLayout.LayoutParams(w, h));
-        if (caption != null) {
-            FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(w, -2);
-            cp.topMargin = h + px(22);
-            wrap.addView(caption, cp);
-        }
         parent.addView(wrap, at(x, y, w, -2));
         tiles.add(card);
     }
 
-    // An icon on its own, no tile or label: a glass circle shows behind it only while it's focused.
+    // A pill in the dock: a small icon and a name. Lights up softly when focused.
+    private void addPill(final String key, String label, int[] lineIcon) {
+        names.put(key, label);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(px(26), 0, px(30), 0);
+        final GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(px(32));
+        bg.setColor(Color.TRANSPARENT);
+        card.setBackground(bg);
+        ImageView iv = new ImageView(this);
+        iv.setImageDrawable(new LineIcon(lineIcon));
+        card.addView(iv, new LinearLayout.LayoutParams(px(34), px(34)));
+        TextView t = text(px(24), 0xE6FFFFFF, semibold);
+        t.setText(label);
+        t.setSingleLine(true);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
+        tp.leftMargin = px(12);
+        card.addView(t, tp);
+        card.setFocusable(true);
+        card.setTag(key);
+        card.setOnFocusChangeListener((v, has) -> {
+            if (has) focusedKey = key;
+            bg.setColor(has ? 0x40FFFFFF : Color.TRANSPARENT);
+            v.animate().scaleX(has ? 1.07f : 1f).scaleY(has ? 1.07f : 1f).setStartDelay(0)
+                    .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
+        });
+        card.setOnClickListener(v -> open(key));
+
+        FrameLayout wrap = new FrameLayout(this);
+        wrap.setClipChildren(false);
+        wrap.addView(card, new FrameLayout.LayoutParams(-2, px(64)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, px(64));
+        lp.leftMargin = px(4);
+        lp.rightMargin = px(4);
+        dock.addView(wrap, lp);
+        tiles.add(card);
+    }
+
+    // A round glass button on its own, top right: it brightens and pops a little when focused.
     private ImageView addIcon(final String key, String label, Drawable icon, int x) {
+        names.put(key, label);
         int b = px(ICON_BUTTON), size = px(ICON_SIZE);
         FrameLayout card = new FrameLayout(this);
         final GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.TRANSPARENT);
+        bg.setColor(0x17FFFFFF);
+        bg.setStroke(Math.max(1, px(2)), 0x1FFFFFFF);
         card.setBackground(bg);
         ImageView iv = new ImageView(this);
         iv.setImageDrawable(icon);
@@ -572,8 +762,9 @@ public class MainActivity extends Activity {
         card.setContentDescription(label);
         card.setOnFocusChangeListener((v, has) -> {
             if (has) focusedKey = key;
-            bg.setColor(has ? 0x38FFFFFF : Color.TRANSPARENT);
-            v.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f).setDuration(140).withLayer().start();
+            bg.setColor(has ? 0x40FFFFFF : 0x17FFFFFF);
+            v.animate().scaleX(has ? 1.12f : 1f).scaleY(has ? 1.12f : 1f).setStartDelay(0)
+                    .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
         });
         card.setOnClickListener(v -> open(key));
         FrameLayout wrap = new FrameLayout(this);
@@ -582,6 +773,200 @@ public class MainActivity extends Activity {
         root.addView(wrap, at(x, px(ICON_TOP), b, b));
         tiles.add(card);
         return iv;
+    }
+
+    // A soft band of light crosses a tile once as it gets focus.
+    private void sweep(final View shine, int sw, int w) {
+        shine.animate().cancel();
+        shine.setTranslationX(-sw);
+        shine.setAlpha(1f);
+        shine.animate().translationX(w).setStartDelay(80).setDuration(560).setInterpolator(EASE)
+                .withEndAction(() -> shine.setAlpha(0f)).start();
+    }
+
+    // A bright, see-through version of the colour an app's picture is mostly made of, for the glow
+    // behind its tile. 0 when the picture is grey, so the wallpaper's own glow is used instead.
+    private static int tintOf(Drawable d) {
+        if (!(d instanceof BitmapDrawable)) return 0;
+        try {
+            Bitmap b = ((BitmapDrawable) d).getBitmap();
+            int bw = b.getWidth(), bh = b.getHeight();
+            int sx = Math.max(1, bw / 16), sy = Math.max(1, bh / 9);
+            float[] hsv = new float[3];
+            double r = 0, g = 0, bl = 0, total = 0;
+            for (int yy = 0; yy < bh; yy += sy) {
+                for (int xx = 0; xx < bw; xx += sx) {
+                    int p = b.getPixel(xx, yy);
+                    if (Color.alpha(p) < 160) continue;
+                    Color.colorToHSV(p, hsv);
+                    double wt = hsv[1] * hsv[2];
+                    wt = wt * wt; // vivid pixels count most
+                    r += Color.red(p) * wt;
+                    g += Color.green(p) * wt;
+                    bl += Color.blue(p) * wt;
+                    total += wt;
+                }
+            }
+            if (total < 1.0) return 0;
+            Color.RGBToHSV((int) (r / total), (int) (g / total), (int) (bl / total), hsv);
+            hsv[1] = Math.max(hsv[1], 0.55f);
+            hsv[2] = 1f;
+            return Color.HSVToColor(0x5C, hsv);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    // The glow used when an app has no colour of its own: the wallpaper's own light, a little softer.
+    private int defaultTint() {
+        return (WALLPAPERS[wallpaper()][3] & 0x00FFFFFF) | 0x50000000;
+    }
+
+    private void paintGlow(int c, float x) {
+        tintColor = c;
+        tintX = x;
+        if (tintGlow == null) return;
+        tintGlow.setColors(new int[] {c, c & 0x00FFFFFF});
+        tintGlow.setGradientCenter(x, 0.66f);
+    }
+
+    // Slides the glow behind the apps to a new colour and place.
+    private void glowTo(final int color, final float x, long ms) {
+        if (tintGlow == null) return;
+        if (tintAnim != null) tintAnim.cancel();
+        final int from = tintColor == 0 ? (color & 0x00FFFFFF) : tintColor;
+        final float x0 = tintX;
+        ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(ms);
+        a.setInterpolator(EASE);
+        a.addUpdateListener(an -> {
+            float t = (Float) an.getAnimatedValue();
+            paintGlow((Integer) argb.evaluate(t, from, color), x0 + (x - x0) * t);
+        });
+        tintAnim = a;
+        a.start();
+    }
+
+    // The small print's surprise: the glow sweeps the whole screen through the colours of the
+    // northern lights while the tiles hop one after another. Then everything settles back.
+    private void surprise() {
+        if (tintGlow == null) return;
+        if (tintAnim != null) tintAnim.cancel();
+        ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(2800);
+        a.setInterpolator(new android.view.animation.LinearInterpolator());
+        a.addUpdateListener(an -> {
+            float t = (Float) an.getAnimatedValue();
+            float[] hsv = {130f + 200f * t, 0.78f, 1f};
+            paintGlow(Color.HSVToColor(0x70, hsv), 0.06f + 0.88f * t);
+        });
+        final boolean[] cancelled = {false};
+        a.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationCancel(Animator an) { cancelled[0] = true; }
+            @Override public void onAnimationEnd(Animator an) { if (!cancelled[0]) syncFocus(); }
+        });
+        tintAnim = a;
+        a.start();
+        wave();
+    }
+
+    // Every app tile hops up and settles back, left to right.
+    private void wave() {
+        int k = 0;
+        for (String key : rowApps) {
+            View card = tile(key);
+            if (card == null) continue;
+            final View wrap = (View) card.getParent();
+            wrap.animate().translationY(-px(34)).setStartDelay(k++ * 70L).setDuration(200).setInterpolator(EASE)
+                    .withEndAction(() -> wrap.animate().translationY(0f).setStartDelay(0).setDuration(420)
+                            .setInterpolator(POP).start()).start();
+        }
+    }
+
+    // The row opens up around the focused app: the ones before it slide left, the ones after it slide
+    // right, and all of them dim a little. With focus anywhere else the row rests.
+    private void rowState(int focus) {
+        if (intro) return;
+        for (int j = 0; j < rowApps.size(); j++) {
+            View card = tile(rowApps.get(j));
+            if (card == null) continue;
+            View wrap = (View) card.getParent();
+            boolean rest = focus < 0 || j == focus;
+            float push = rest ? 0f : (j < focus ? -px(PUSH) : px(PUSH));
+            wrap.animate().translationX(push).alpha(rest ? 1f : 0.62f)
+                    .setStartDelay(0).setDuration(280).setInterpolator(EASE).start();
+        }
+    }
+
+    private void syncFocus() {
+        onFocusMoved(getCurrentFocus());
+    }
+
+    // Everything that follows focus: the header, the colour of the glow and how the row opens up.
+    private void onFocusMoved(View f) {
+        if (f == null || sectionLabel == null || appsScroll == null) return;
+        try {
+            Object tag = f.getTag();
+            if (!(tag instanceof String)) {
+                if (f == credit) {
+                    showHeader("THE SMALL PRINT", "Press OK for a surprise", "Hold OK to edit");
+                    rowState(-1);
+                    glowTo(defaultTint(), 0.2f, 380);
+                }
+                return;
+            }
+            String key = (String) tag;
+            int idx = rowApps.indexOf(key);
+            if (idx >= 0) {
+                showHeader("APPS", names.get(key), (idx + 1) + " / " + rowApps.size());
+                rowState(idx);
+                Integer t = tints.get(key);
+                float x = (gridX(idx) + tileW / 2f - appsScroll.getScrollX()) / getResources().getDisplayMetrics().widthPixels;
+                glowTo(t != null ? t : defaultTint(), Math.max(0.05f, Math.min(0.95f, x)), intro ? 1400 : 380);
+            } else {
+                boolean quick = key.equals(NETWORK) || key.startsWith(QUICK);
+                showHeader(quick ? "QUICK SETTINGS" : "INPUTS AND SETTINGS", names.get(key), "");
+                rowState(-1);
+                glowTo(defaultTint(), quick ? 0.82f : 0.2f, 380);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void showHeader(String section, String name, String count) {
+        sectionLabel.setText(section);
+        countText.setText(count);
+        if (name == null) name = "";
+        if (!name.contentEquals(nameText.getText())) {
+            nameText.setText(name);
+            nameText.setAlpha(0f);
+            nameText.setTranslationY(px(16));
+            nameText.animate().alpha(1f).translationY(0f).setStartDelay(0).setDuration(240).setInterpolator(EASE).start();
+        }
+    }
+
+    // The small print under the dock. Change it with --es credit "text", or hold OK on it.
+    private String creditText() {
+        return getSharedPreferences(PREFS, 0).getString("credit", "Built by Aryan");
+    }
+
+    private void editCredit() {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(creditText());
+        et.setSingleLine(true);
+        et.setSelectAllOnFocus(true);
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle("Small text under the dock")
+                .setView(et)
+                .setPositiveButton("Save", (d, which) -> {
+                    String s = et.getText().toString().trim();
+                    SharedPreferences.Editor e = getSharedPreferences(PREFS, 0).edit();
+                    if (s.isEmpty()) e.remove("credit");
+                    else e.putString("credit", s);
+                    e.apply();
+                    credit.setText(creditText());
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void open(String key) {
@@ -649,7 +1034,7 @@ public class MainActivity extends Activity {
     private List<Integer> quickList() {
         List<Integer> out = new ArrayList<>();
         String saved = getSharedPreferences(PREFS, 0).getString("quick", null);
-        if (saved == null) return out;
+        if (saved == null) saved = "bluetooth,sound,picture"; // all three, unless picked otherwise
         for (String name : saved.split("[,\\s]+")) {
             int q = Arrays.asList(QUICK_NAMES).indexOf(name.toLowerCase(java.util.Locale.ROOT));
             if (q < 0 || out.contains(q) || quickIntents(QUICK_NAMES[q]).isEmpty()) continue;
@@ -962,13 +1347,13 @@ public class MainActivity extends Activity {
         getSharedPreferences(PREFS, 0).edit().putString("apps", android.text.TextUtils.join(",", rowApps)).apply();
     }
 
-    // Where app number i sits in the grid.
+    // Where app number i sits in the sideways row.
     private int gridX(int i) {
-        return px(MARGIN) + (i % PER_ROW) * (tileW + px(GAP));
+        return px(MARGIN) + i * (tileW + px(TILE_GAP));
     }
 
     private int gridY(int i) {
-        return gridTop + (i / PER_ROW) * px(ROW_STEP);
+        return px(TILE_IN);
     }
 
     private View tile(String key) {
@@ -991,7 +1376,7 @@ public class MainActivity extends Activity {
 
     private boolean moveKey(String key, int code, boolean ok, boolean down) {
         int step = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1
-                : code == KeyEvent.KEYCODE_DPAD_UP ? -PER_ROW : code == KeyEvent.KEYCODE_DPAD_DOWN ? PER_ROW : 0;
+                : 0; // one row now: up and down stay put while moving
         if (step != 0) {
             int from = rowApps.indexOf(key), to = from + step;
             if (down && to >= 0 && to < rowApps.size()) {
@@ -1019,6 +1404,7 @@ public class MainActivity extends Activity {
                 moveHint.setVisibility(View.GONE);
                 saveRow();
                 refreshApps();
+                syncFocus();
             }
             return true;
         }
