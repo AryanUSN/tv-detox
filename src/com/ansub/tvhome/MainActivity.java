@@ -628,18 +628,21 @@ public class MainActivity extends Activity {
         brightSlider = new Slider(this, new LineIcon(LineIcon.SUN), v -> setBrightness(v));
         root.addView(brightSlider, at(cx, y + px(82), w, px(52)));
 
-        TextView vl = text(px(23), Color.WHITE, semibold);
-        vl.setText("Volume");
-        root.addView(vl, at(cx, y + px(136), -2, -2));
-        volPct = text(px(23), 0xCCFFFFFF, semibold);
-        volPct.setGravity(Gravity.END);
-        root.addView(volPct, at(cx, y + px(136), w, -2));
-        volSlider = new Slider(this, new LineIcon(LineIcon.SOUND), v -> setVolume(v));
-        root.addView(volSlider, at(cx, y + px(164), w, px(52)));
-
         // The picture mode: five chips. Hold OK on one to save the TV's current mode to it.
         int g = px(8), pn = PIC_MODES.length, pw = (w - (pn - 1) * g) / pn;
-        for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(226), pw, i);
+        for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(136), pw, i);
+
+
+        TextView vl = text(px(23), Color.WHITE, semibold);
+        vl.setText("Volume");
+        root.addView(vl, at(cx, y + px(184), -2, -2));
+        volPct = text(px(23), 0xCCFFFFFF, semibold);
+        volPct.setGravity(Gravity.END);
+        root.addView(volPct, at(cx, y + px(184), w, -2));
+        volSlider = new Slider(this, new LineIcon(LineIcon.SOUND), v -> setVolume(v));
+        root.addView(volSlider, at(cx, y + px(212), w, px(52)));
+
+        
 
         // The sound mode: four chips, or one button to the TV's own sound page when this TV can't do it.
         int cy = y + px(274);
