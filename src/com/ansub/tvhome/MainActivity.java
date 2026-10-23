@@ -122,6 +122,7 @@ public class MainActivity extends Activity {
     private static final String TAB = "tab:", SET = "set:";
     private static final String[] TAB_NAMES = {"Apps", "Inputs", "Settings"};
     private static final String[] SOUND_MODES = {"Standard", "Movie", "Music", "Voice"};
+    private static final String[] PIC_MODES = {"Standard", "Vivid", "Sport", "Movie", "Custom"};
 
     // Wallpapers, saved by name. Each one is a scene: five sky colours top to bottom, a glow at the top
     // left, a glow on the horizon, and the colour of the dunes at their top and bottom.
@@ -183,6 +184,8 @@ public class MainActivity extends Activity {
     private TextView brightPct, volPct;
     private final List<TextView> chips = new ArrayList<>();
     private final List<GradientDrawable> chipBgs = new ArrayList<>();
+    private final List<TextView> picChips = new ArrayList<>();
+    private final List<GradientDrawable> picBgs = new ArrayList<>();
     private int soundMode;
     private Equalizer eq;
     private boolean eqChecked, eqOk, warnedWrite;
@@ -304,7 +307,8 @@ public class MainActivity extends Activity {
         String quick = intent == null ? null : intent.getStringExtra("quick");
         String small = intent == null ? null : intent.getStringExtra("credit");
         String where = intent == null ? null : intent.getStringExtra("city");
-        if (apps == null && quick == null && small == null && where == null) return false;
+        String pics = intent == null ? null : intent.getStringExtra("picmodes");
+        if (apps == null && quick == null && small == null && where == null && pics == null) return false;
         SharedPreferences prefs = getSharedPreferences(PREFS, 0);
         String stamp = intent.getStringExtra("stamp");
         if (stamp != null && stamp.equals(prefs.getString("stamp", null))) return false;
@@ -324,6 +328,12 @@ public class MainActivity extends Activity {
             small = small.trim();
             if (small.isEmpty()) e.remove("credit");
             else e.putString("credit", small);
+        }
+        if (pics != null) {
+            String[] pm = pics.trim().split("[,\\s]+");
+            for (int i = 0; i < pm.length && i < PIC_MODES.length; i++) {
+                try { e.putInt("pm_" + i, Integer.parseInt(pm[i])); } catch (Exception ignored) {}
+            }
         }
         String city = intent.getStringExtra("city");
         if (city != null) {
@@ -550,8 +560,17 @@ public class MainActivity extends Activity {
     private void buildWeather(int x) {
         int y = px(262);
         View card = new View(this);
-        card.setBackground(glass(44));
+        final GradientDrawable cardBg = glass(44);
+        card.setBackground(cardBg);
+        card.setFocusable(true);
+        card.setOnFocusChangeListener((v, has) ->
+                cardBg.setStroke(has ? Math.max(2, px(4)) : Math.max(1, px(2)), has ? 0xFFFFFFFF : 0x47FFFFFF));
+        card.setOnClickListener(v -> showCities());
         root.addView(card, at(x, y, px(1050), px(318)));
+        TextView change = text(px(18), 0x99FFFFFF, regular);
+        change.setText("OK to change place");
+        change.setGravity(Gravity.END);
+        root.addView(change, at(x + px(790), y + px(40), px(220), -2));
         wxCity = text(px(24), 0xE6FFFFFF, semibold);
         wxCity.setLetterSpacing(0.12f);
         wxCity.setText(city()[0].toUpperCase(java.util.Locale.ROOT));
@@ -589,56 +608,129 @@ public class MainActivity extends Activity {
         }
     }
 
-    // The quick controls card: brightness, volume and the sound mode, right on the home screen.
+    // The quick controls card: brightness, volume, the picture mode and the sound mode.
     private void buildControls(int x) {
         int y = px(262), w = px(502), cx = x + px(44);
         View card = new View(this);
         card.setBackground(glass(44));
         root.addView(card, at(x, y, px(590), px(318)));
-        TextView hdr = text(px(21), 0xC7FFFFFF, semibold);
+        TextView hdr = text(px(20), 0xC7FFFFFF, semibold);
         hdr.setLetterSpacing(0.14f);
         hdr.setText("QUICK CONTROLS");
-        root.addView(hdr, at(cx, y + px(34), -2, -2));
+        root.addView(hdr, at(cx, y + px(26), -2, -2));
 
-        TextView bl = text(px(24), Color.WHITE, semibold);
+        TextView bl = text(px(23), Color.WHITE, semibold);
         bl.setText("Brightness");
-        root.addView(bl, at(cx, y + px(72), -2, -2));
-        brightPct = text(px(24), 0xCCFFFFFF, semibold);
+        root.addView(bl, at(cx, y + px(54), -2, -2));
+        brightPct = text(px(23), 0xCCFFFFFF, semibold);
         brightPct.setGravity(Gravity.END);
-        root.addView(brightPct, at(cx, y + px(72), w, -2));
+        root.addView(brightPct, at(cx, y + px(54), w, -2));
         brightSlider = new Slider(this, new LineIcon(LineIcon.SUN), v -> setBrightness(v));
-        root.addView(brightSlider, at(cx, y + px(104), w, px(52)));
+        root.addView(brightSlider, at(cx, y + px(82), w, px(52)));
 
-        TextView vl = text(px(24), Color.WHITE, semibold);
+        TextView vl = text(px(23), Color.WHITE, semibold);
         vl.setText("Volume");
-        root.addView(vl, at(cx, y + px(164), -2, -2));
-        volPct = text(px(24), 0xCCFFFFFF, semibold);
+        root.addView(vl, at(cx, y + px(136), -2, -2));
+        volPct = text(px(23), 0xCCFFFFFF, semibold);
         volPct.setGravity(Gravity.END);
-        root.addView(volPct, at(cx, y + px(164), w, -2));
+        root.addView(volPct, at(cx, y + px(136), w, -2));
         volSlider = new Slider(this, new LineIcon(LineIcon.SOUND), v -> setVolume(v));
-        root.addView(volSlider, at(cx, y + px(196), w, px(52)));
+        root.addView(volSlider, at(cx, y + px(164), w, px(52)));
+
+        // The picture mode: five chips. Hold OK on one to save the TV's current mode to it.
+        int g = px(8), pn = PIC_MODES.length, pw = (w - (pn - 1) * g) / pn;
+        for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(226), pw, i);
 
         // The sound mode: four chips, or one button to the TV's own sound page when this TV can't do it.
-        int cy = y + px(260);
+        int cy = y + px(274);
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
         if (!soundSupported()) {
             addChip("More sound settings", cx, cy, w, -1);
         } else {
-            int n = SOUND_MODES.length, g = px(8), chipW = (w - (n - 1) * g) / n;
-            for (int i = 0; i < n; i++) addChip(SOUND_MODES[i], cx + i * (chipW + g), cy, chipW, i);
+            int n = SOUND_MODES.length, cwid = (w - (n - 1) * g) / n;
+            for (int i = 0; i < n; i++) addChip(SOUND_MODES[i], cx + i * (cwid + g), cy, cwid, i);
         }
         paintChips();
         syncSliders();
     }
 
-    private void addChip(String label, int x, int y, int w, final int idx) {
-        final TextView t = text(px(21), Color.WHITE, semibold);
+    private void addPicChip(String label, int x, int y, int w, final int idx) {
+        final TextView t = text(px(17), Color.WHITE, semibold);
         t.setText(label);
         t.setGravity(Gravity.CENTER);
         t.setSingleLine(true);
         t.setFocusable(true);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(px(23));
+        bg.setCornerRadius(px(20));
+        t.setBackground(bg);
+        t.setOnFocusChangeListener((v, has) -> {
+            paintPicChips();
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setStartDelay(0)
+                    .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
+        });
+        t.setOnClickListener(v -> pickPicture(idx));
+        t.setOnLongClickListener(v -> { learnPicture(idx); return true; });
+        picChips.add(t);
+        picBgs.add(bg);
+        root.addView(t, at(x, y, w, px(40)));
+    }
+
+    // The TV's own number for a picture mode, saved by holding OK on its chip (or sent with --es picmodes).
+    private int learnedPic(int idx) {
+        return getSharedPreferences(PREFS, 0).getInt("pm_" + idx, -1);
+    }
+
+    private int currentPic() {
+        try { return Settings.Global.getInt(getContentResolver(), "picture_mode"); }
+        catch (Exception e) { return -1; }
+    }
+
+    private void toast(String s) {
+        android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    private void pickPicture(int idx) {
+        int v = learnedPic(idx);
+        if (v < 0) {
+            toast("First set " + PIC_MODES[idx] + " on the TV (Settings > Picture), then hold OK on this button to save it.");
+            return;
+        }
+        try {
+            Settings.Global.putInt(getContentResolver(), "picture_mode", v);
+        } catch (Exception e) {
+            toast("Needs the one-time permission: run the grant command from the PC.");
+            return;
+        }
+        paintPicChips();
+        root.postDelayed(this::syncSliders, 700);
+    }
+
+    private void learnPicture(int idx) {
+        int cur = currentPic();
+        if (cur < 0) return;
+        getSharedPreferences(PREFS, 0).edit().putInt("pm_" + idx, cur).apply();
+        toast(PIC_MODES[idx] + " saved");
+        paintPicChips();
+    }
+
+    private void paintPicChips() {
+        int cur = currentPic();
+        for (int i = 0; i < picChips.size(); i++) {
+            TextView t = picChips.get(i);
+            boolean on = cur >= 0 && learnedPic(i) == cur;
+            picBgs.get(i).setColor(on ? 0xFFFFFFFF : t.hasFocus() ? 0x59FFFFFF : 0x29FFFFFF);
+            t.setTextColor(on ? 0xFF121214 : Color.WHITE);
+        }
+    }
+
+    private void addChip(String label, int x, int y, int w, final int idx) {
+        final TextView t = text(px(19), Color.WHITE, semibold);
+        t.setText(label);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        t.setFocusable(true);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(px(20));
         t.setBackground(bg);
         t.setOnFocusChangeListener((v, has) -> {
             paintChips();
@@ -654,7 +746,7 @@ public class MainActivity extends Activity {
         });
         chips.add(t);
         chipBgs.add(bg);
-        root.addView(t, at(x, y, w, px(46)));
+        root.addView(t, at(x, y, w, px(40)));
     }
 
     private void paintChips() {
@@ -1237,7 +1329,7 @@ public class MainActivity extends Activity {
             mode = 0;
             buildTiles();
             showAddMenu(-1);
-        } else if (name.equals("city")) editCity();
+        } else if (name.equals("city")) showCities();
         else if (name.equals("text")) editCredit();
         else try { startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
         catch (Exception ignored) {}
@@ -1279,7 +1371,7 @@ public class MainActivity extends Activity {
     private List<Integer> quickList() {
         List<Integer> out = new ArrayList<>();
         String saved = getSharedPreferences(PREFS, 0).getString("quick", null);
-        if (saved == null) saved = "bluetooth,sound,picture"; // all three, unless picked otherwise
+        if (saved == null) saved = "bluetooth,sound"; // unless picked otherwise
         for (String name : saved.split("[,\\s]+")) {
             int q = Arrays.asList(QUICK_NAMES).indexOf(name.toLowerCase(java.util.Locale.ROOT));
             if (q < 0 || out.contains(q) || quickIntents(QUICK_NAMES[q]).isEmpty()) continue;
@@ -1759,10 +1851,75 @@ public class MainActivity extends Activity {
 
     // ---- Weather: Open-Meteo (free, no account). Fetched at most every 30 minutes, kept for next time.
 
+    // Where the weather is for: a place picked in Settings, else the place found from the TV's internet
+    // address (done once), else Oslo.
     private String[] city() {
-        String s = getSharedPreferences(PREFS, 0).getString("city", "Oslo,59.9139,10.7522");
+        SharedPreferences sp = getSharedPreferences(PREFS, 0);
+        String s = sp.getString("city", sp.getString("city_auto", "Oslo,59.9139,10.7522"));
         String[] p = s.split("\\s*,\\s*");
         return p.length >= 3 ? p : new String[] {"Oslo", "59.9139", "10.7522"};
+    }
+
+    private static final String[][] CITIES = {
+        {"Oslo", "59.9139", "10.7522"}, {"Bergen", "60.3913", "5.3221"}, {"Trondheim", "63.4305", "10.3951"},
+        {"Stavanger", "58.9700", "5.7331"}, {"Kristiansand", "58.1467", "7.9956"}, {"Troms\u00F8", "69.6492", "18.9553"},
+        {"Drammen", "59.7440", "10.2045"}, {"Fredrikstad", "59.2181", "10.9298"}, {"\u00C5lesund", "62.4722", "6.1495"},
+        {"Bod\u00F8", "67.2804", "14.4049"}, {"Hamar", "60.7945", "11.0680"}, {"Lillehammer", "61.1153", "10.4662"},
+        {"Molde", "62.7375", "7.1591"}, {"Haugesund", "59.4138", "5.2680"}, {"Skien", "59.2094", "9.6090"},
+        {"Sandefjord", "59.1312", "10.2167"}, {"T\u00F8nsberg", "59.2676", "10.4076"}, {"Arendal", "58.4615", "8.7725"},
+        {"Narvik", "68.4385", "17.4272"}, {"Kristiansund", "63.1115", "7.7280"},
+    };
+
+    // The Weather place tile: detect it, pick a city, or type one.
+    private void showCities() {
+        final List<String> labels = new ArrayList<>();
+        labels.add("Detect automatically");
+        for (String[] c : CITIES) labels.add(c[0]);
+        labels.add("Type a place...");
+        panel("Weather place", labels, which -> {
+            SharedPreferences.Editor e = getSharedPreferences(PREFS, 0).edit();
+            if (which == 0) {
+                e.remove("city").remove("city_auto").apply();
+                loadWeather(true);
+            } else if (which == labels.size() - 1) {
+                editCity();
+            } else {
+                String[] c = CITIES[which - 1];
+                e.putString("city", c[0] + "," + c[1] + "," + c[2]).apply();
+                loadWeather(true);
+            }
+        });
+    }
+
+    // Finds roughly where the TV is from its internet address, once, and remembers it.
+    private boolean detecting;
+    private void detectCity() {
+        if (detecting) return;
+        detecting = true;
+        new Thread(() -> {
+            try {
+                HttpURLConnection con = (HttpURLConnection) new URL("https://get.geojs.io/v1/ip/geo.json").openConnection();
+                con.setConnectTimeout(8000);
+                con.setReadTimeout(8000);
+                InputStream in = con.getInputStream();
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int len;
+                while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                in.close();
+                con.disconnect();
+                JSONObject o = new JSONObject(out.toString("UTF-8"));
+                final String name = o.optString("city", "").isEmpty() ? o.optString("region", "Home") : o.optString("city");
+                final String found = name.replace(",", " ") + "," + o.getString("latitude") + "," + o.getString("longitude");
+                runOnUiThread(() -> {
+                    detecting = false;
+                    getSharedPreferences(PREFS, 0).edit().putString("city_auto", found).apply();
+                    loadWeather(true);
+                });
+            } catch (Exception e) {
+                detecting = false;
+            }
+        }).start();
     }
 
     private void editCity() {
@@ -1789,6 +1946,7 @@ public class MainActivity extends Activity {
     private void loadWeather(boolean force) {
         if (wxTemp == null) return;
         final SharedPreferences sp = getSharedPreferences(PREFS, 0);
+        if (!sp.contains("city") && !sp.contains("city_auto")) detectCity();
         final String[] c = city();
         wxCity.setText(c[0].toUpperCase(java.util.Locale.ROOT));
         String cached = sp.getString("wx", null);
@@ -1895,20 +2053,32 @@ public class MainActivity extends Activity {
 
     // ---- Quick controls: brightness, volume, sound mode.
 
+    // This TV keeps its backlight (0 to 100) in the setting picture_backlight. Writing it needs a
+    // permission that is granted once from a computer; without it the slider says how.
+    private static final String BACKLIGHT = "picture_backlight";
+
+    private boolean hasTvBacklight() {
+        try { Settings.Global.getInt(getContentResolver(), BACKLIGHT); return true; }
+        catch (Exception e) { return false; }
+    }
+
     private void setBrightness(int v) {
         v = Math.max(5, v);
         brightPct.setText(v + "%");
         try {
-            if (android.os.Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) throw new SecurityException();
-            Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE,
-                    Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
-            Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, Math.round(v * 2.55f));
+            if (hasTvBacklight()) {
+                Settings.Global.putInt(getContentResolver(), BACKLIGHT, v);
+            } else {
+                if (android.os.Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(this)) throw new SecurityException();
+                Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE,
+                        Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
+                Settings.System.putInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, Math.round(v * 2.55f));
+            }
         } catch (Exception e) {
             if (!warnedWrite) {
                 warnedWrite = true;
-                android.widget.Toast.makeText(this, "Brightness needs a one-time permission. Opening the TV's picture settings instead.",
+                android.widget.Toast.makeText(this, "Brightness needs a one-time permission: run the grant command from the PC.",
                         android.widget.Toast.LENGTH_LONG).show();
-                openQuick("picture");
             }
         }
     }
@@ -1926,8 +2096,9 @@ public class MainActivity extends Activity {
     private void syncSliders() {
         if (brightSlider == null) return;
         try {
-            int b = Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 178);
-            int v = Math.min(100, Math.round(b / 2.55f));
+            int v;
+            if (hasTvBacklight()) v = Math.max(0, Math.min(100, Settings.Global.getInt(getContentResolver(), BACKLIGHT)));
+            else v = Math.min(100, Math.round(Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, 178) / 2.55f));
             brightSlider.set(v);
             brightPct.setText(v + "%");
         } catch (Exception ignored) {}
@@ -1938,6 +2109,7 @@ public class MainActivity extends Activity {
             volSlider.set(v);
             volPct.setText(v + "%");
         }
+        paintPicChips();
     }
 
     // The sound modes shape the TV's equaliser. Not every TV lets an app do that: when it doesn't, the
