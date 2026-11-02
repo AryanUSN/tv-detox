@@ -111,12 +111,12 @@ public class MainActivity extends Activity {
     private static final String TCL_SHOW_WINDOW = "com.tcl.settings.SHOW_WINDOW";
 
     // Layout is designed at 1920x1080 and scaled to the TV's real UI size by px().
-    private static final int MARGIN = 120, RADIUS = 24;
+    private static final int MARGIN = 120, RADIUS = 28;
     // The apps sit in one row, centred on a glass shelf. Tile size and gap, where the shelf sits and how
     // big it is, how far down inside it the tiles start, and how far the others slide from the focused one.
-    private static final int TILE_W = 206, TILE_H = 118, TILE_GAP = 26;
-    private static final int ROW_TOP = 748, ROW_H = 208, SHELF_W = 1680, TILE_IN = 43, PUSH = 20;
-    private static final float POP_SCALE = 1.23f; // how much bigger the focused app grows
+    private static final int TILE_W = 300, TILE_H = 169, TILE_GAP = 30;
+    private static final int ROW_TOP = 420, ROW_H = 360, SHELF_W = 1800, SHELF_X = 60, TILE_IN = 95, PUSH = 28;
+    private static final float POP_SCALE = 1.14f; // how much bigger the focused app grows
     private static final int ICON_TOP = 68, ICON_BUTTON = 64, ICON_SIZE = 34, ICON_GAP = 8; // top right
     // The tab bar at the top: what the shelf shows.
     private static final String TAB = "tab:", SET = "set:";
@@ -138,6 +138,20 @@ public class MainActivity extends Activity {
         {0xFF160E25, 0xFF51304D, 0xFFD17C5A, 0xFFFFC08A, 0xFF291824, 0x8CFFB77A, 0xD9FFDD99, 0x8C793E52, 0xE618111E},
         {0xFF071A30, 0xFF164664, 0xFF3E86A0, 0xFF9FE5F1, 0xFF092034, 0x8C5ADFFF, 0xD9C9F9FF, 0x8C1C4865, 0xE6061224},
         {0xFF160D28, 0xFF382456, 0xFF764B9C, 0xFFC18BCF, 0xFF180D2D, 0x8CC08CFF, 0xD9FFD5FF, 0x8C43245E, 0xE60B071A},
+    };
+    // The motion of each wallpaper (same order): three drifting lights, then the particles:
+    // 0 none, 1 stars, 2 embers, 3 bubbles, 4 snow.
+    private static final int[][] MOTION = {
+        {0x66FF9A70, 0x557A8CFF, 0x55FF6FA8, 2},
+        {0x6640D8E0, 0x553C8CFF, 0x5530E0B0, 3},
+        {0x66FFB070, 0x55FF7A5A, 0x55FFD890, 2},
+        {0x7050FFB0, 0x608C5AF0, 0x5530D8E8, 1},
+        {0x66FF7AC0, 0x55FFB0A0, 0x55C060FF, 2},
+        {0x555A7AFF, 0x558A5AFF, 0x4030C0FF, 1},
+        {0x40FFFFFF, 0x30A0B4C8, 0x28FFFFFF, 0},
+        {0x66FFB060, 0x55FF6A5A, 0x55FFE090, 2},
+        {0x6650D8FF, 0x55A0F0FF, 0x554C90FF, 4},
+        {0x66B070FF, 0x55FF70D0, 0x554C60FF, 2},
     };
     private float scale = 1f;
 
@@ -181,6 +195,8 @@ public class MainActivity extends Activity {
     private FrameLayout quickPanel;
     private View heroGlow;
     private boolean quickOpen;
+    private Scene scene;      // the moving part of the wallpaper
+    private boolean motionOn = true;
     private View capsule;    // the glass pill behind the round icons, top right
     private TextView wxCity, wxTemp, wxCond, wxRange;
     private final TextView[] wxHour = new TextView[6];
@@ -230,6 +246,7 @@ public class MainActivity extends Activity {
         saveConfig(getIntent());
         loadFonts();
         scale = getResources().getDisplayMetrics().widthPixels / 1920f;
+        motionOn = getSharedPreferences(PREFS, 0).getBoolean("motion", true);
         showWallpaper(wallpaper());
 
         ScrollView scroller = new ScrollView(this);
@@ -262,9 +279,10 @@ public class MainActivity extends Activity {
         moveHint = text(px(22), 0xCCFFFFFF, regular);
         moveHint.setText(Strings.t("Use the arrows to move it, then press OK"));
         moveHint.setVisibility(View.GONE);
-        root.addView(moveHint, at(px(MARGIN), px(716), -2, -2));
+        root.addView(moveHint, at(px(SHELF_X + 40), px(386), -2, -2));
 
         buildChrome();
+        scene.setTheme(MOTION[wallpaper()]);
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
         if (soundMode != 0) applySound(soundMode);
         root.postDelayed(wxTick, 30 * 60 * 1000L);
@@ -374,8 +392,15 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        if (scene != null) scene.run(false);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        if (scene != null) scene.run(motionOn);
         // Rebuild only when apps were installed, removed or updated.
         if (dirty) {
             dirty = false;
@@ -454,6 +479,7 @@ public class MainActivity extends Activity {
         Drawable previous = getWindow().getDecorView().getBackground();
         Drawable next = background(WALLPAPERS[i]);
         getWindow().setBackgroundDrawable(next);
+        if (scene != null) scene.setTheme(MOTION[i]);
         if (root != null && previous != null) {
             View fade = new View(this);
             fade.setBackground(previous);
@@ -515,7 +541,9 @@ public class MainActivity extends Activity {
     // Aurora 2: a cinematic hero, compact weather and a genuinely hidden control drawer.
     private void buildChrome() {
         int screenW = getResources().getDisplayMetrics().widthPixels;
-        int m = px(MARGIN), cw = px(SHELF_W);
+        int m = px(MARGIN), cw = px(SHELF_W), sx = px(SHELF_X);
+        scene = new Scene(this);
+        root.addView(scene, 0, at(0, 0, screenW, px(1080)));
         View nav = new View(this);
         nav.setBackground(glass(40));
         root.addView(nav, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
@@ -523,26 +551,27 @@ public class MainActivity extends Activity {
         capsule.setBackground(glass(38));
         root.addView(capsule, at(0, px(62), px(100), px(76)));
 
-        buildHero(m);
-        buildWeather(m + px(1090));
+        buildWeather(m);
         View shelf = new View(this);
         shelf.setBackground(glass(48));
-        root.addView(shelf, at(m, px(ROW_TOP), cw, px(ROW_H)));
+        root.addView(shelf, at(sx, px(ROW_TOP), cw, px(ROW_H)));
         sectionLabel = text(px(20), 0x9EFFFFFF, semibold);
         countText = text(px(20), 0x9EFFFFFF, semibold);
-        nameText = text(px(23), 0xEEFFFFFF, semibold);
+        nameText = text(px(28), 0xF2FFFFFF, semibold);
         nameText.setSingleLine(true);
         nameText.setGravity(Gravity.CENTER);
-        root.addView(nameText, at(m, px(ROW_TOP + 178), cw, -2));
+        root.addView(nameText, at(sx, px(ROW_TOP + 292), cw, -2));
         appsScroll = new HorizontalScrollView(this);
         appsScroll.setHorizontalScrollBarEnabled(false);
         appsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         appsScroll.setClipChildren(false);
         appsScroll.setClipToPadding(false);
+        appsScroll.setHorizontalFadingEdgeEnabled(true);
+        appsScroll.setFadingEdgeLength(px(70));
         appsRow = new FrameLayout(this);
         appsRow.setClipChildren(false);
         appsScroll.addView(appsRow, new FrameLayout.LayoutParams(-2, -1));
-        root.addView(appsScroll, at(m, px(ROW_TOP), cw, px(ROW_H)));
+        root.addView(appsScroll, at(sx, px(ROW_TOP), cw, px(ROW_H)));
 
         credit = text(px(18), 0xB0FFFFFF, regular);
         credit.setText(creditText());
@@ -563,47 +592,6 @@ public class MainActivity extends Activity {
         buildControls(0);
         quickPanel.setVisibility(View.GONE);
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> onFocusMoved(newF));
-    }
-
-    private void buildHero(int x) {
-        int y = px(265), w = px(1058), h = px(420);
-        FrameLayout hero = new FrameLayout(this);
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xEF101B43, 0xD92D275E, 0xA5105478, 0xE9131738});
-        bg.setCornerRadius(px(42));
-        bg.setStroke(Math.max(1, px(2)), 0x66C9E6FF);
-        hero.setBackground(bg);
-        hero.setClipToOutline(true);
-        root.addView(hero, at(x, y, w, h));
-        heroGlow = new View(this);
-        heroGlow.setBackground(radial(0x6F879FFF, .78f, .38f, px(480)));
-        hero.addView(heroGlow, at(px(370), -px(125), px(700), px(690)));
-        heroGlow.animate().translationX(px(-110)).alpha(.65f).setDuration(16000)
-                .setInterpolator(EASE).withEndAction(() -> {
-                    if (heroGlow != null && heroGlow.isAttachedToWindow())
-                        heroGlow.animate().translationX(0).alpha(1f).setDuration(16000).start();
-                }).start();
-        TextView overline = text(px(21), 0xBFC8D8FF, semibold);
-        overline.setLetterSpacing(.18f);
-        overline.setText("AURORA  /  YOUR HOME");
-        hero.addView(overline, at(px(55), px(54), -2, -2));
-        TextView headline = text(px(72), Color.WHITE, light);
-        headline.setText("Everything. In one place.");
-        headline.setSingleLine(true);
-        headline.setLetterSpacing(-.035f);
-        hero.addView(headline, at(px(52), px(112), px(935), -2));
-        TextView subtitle = text(px(26), 0xCDE7EEFF, regular);
-        subtitle.setText("Your apps, connected to a calmer, more cinematic home.");
-        hero.addView(subtitle, at(px(57), px(216), px(900), -2));
-        TextView action = text(px(26), Color.WHITE, semibold);
-        action.setText("Explore apps   ›");
-        action.setGravity(Gravity.CENTER);
-        action.setBackground(glass(30));
-        action.setFocusable(true);
-        action.setOnClickListener(v -> { if (!rowApps.isEmpty()) { View t = tile(rowApps.get(0)); if (t != null) t.requestFocus(); } });
-        action.setOnFocusChangeListener((v, has) -> v.animate().scaleX(has?1.08f:1f)
-                .scaleY(has?1.08f:1f).setDuration(260).setInterpolator(POP).start());
-        hero.addView(action, at(px(55), px(300), px(260), px(66)));
     }
 
     private void toggleQuick(boolean show) {
@@ -630,42 +618,40 @@ public class MainActivity extends Activity {
     }
 
     // The weather card: the temperature now, then the next hours. Filled in when the forecast arrives.
+    // A slim weather pill under the clock: temperature, conditions, high and low. OK changes the place.
     private void buildWeather(int x) {
-        int y = px(265);
+        int y = px(262);
         View card = new View(this);
-        final GradientDrawable cardBg = glass(42);
+        final GradientDrawable cardBg = glass(40);
         card.setBackground(cardBg);
         card.setFocusable(true);
         card.setOnFocusChangeListener((v, has) -> cardBg.setStroke(px(has ? 4 : 2), has ? 0xFFFFFFFF : 0x47FFFFFF));
         card.setOnClickListener(v -> showCities());
-        root.addView(card, at(x, y, px(590), px(420)));
-        wxCity = text(px(23), 0xDDFFFFFF, semibold);
-        wxCity.setLetterSpacing(.13f);
-        wxCity.setText(city()[0].toUpperCase(java.util.Locale.ROOT));
-        root.addView(wxCity, at(x + px(38), y + px(31), -2, -2));
-        wxTemp = text(px(112), Color.WHITE, light);
+        root.addView(card, at(x, y, px(600), px(104)));
+        wxIcon[0] = new ImageView(this);
+        root.addView(wxIcon[0], at(x + px(26), y + px(20), px(64), px(64)));
+        wxTemp = text(px(62), Color.WHITE, light);
         wxTemp.setIncludeFontPadding(false);
-        wxTemp.setText("--°");
-        root.addView(wxTemp, at(x + px(34), y + px(76), -2, -2));
-        wxCond = text(px(27), Color.WHITE, semibold);
+        wxTemp.setText("--\u00B0");
+        root.addView(wxTemp, at(x + px(106), y + px(20), -2, -2));
+        wxCity = text(px(18), 0xCCFFFFFF, semibold);
+        wxCity.setLetterSpacing(0.12f);
+        wxCity.setSingleLine(true);
+        wxCity.setText(city()[0].toUpperCase(java.util.Locale.ROOT));
+        root.addView(wxCity, at(x + px(246), y + px(14), px(330), -2));
+        wxCond = text(px(26), Color.WHITE, semibold);
+        wxCond.setSingleLine(true);
         wxCond.setText("Loading weather");
-        root.addView(wxCond, at(x + px(39), y + px(205), px(480), -2));
-        wxRange = text(px(22), 0xCCFFFFFF, regular);
+        root.addView(wxCond, at(x + px(246), y + px(36), px(330), -2));
+        wxRange = text(px(19), 0xCCFFFFFF, regular);
         wxRange.setSingleLine(true);
-        root.addView(wxRange, at(x + px(39), y + px(245), px(510), -2));
-        View line = new View(this);
-        line.setBackgroundColor(0x35FFFFFF);
-        root.addView(line, at(x+px(38),y+px(288),px(510),px(1)));
-        for (int i=0;i<6;i++) {
-            int cx = x + px(30 + i * 89);
-            wxHour[i] = text(px(19), 0xDDFFFFFF, semibold);
-            wxHour[i].setGravity(Gravity.CENTER);
-            root.addView(wxHour[i],at(cx,y+px(306),px(82),-2));
-            wxIcon[i] = new ImageView(this);
-            root.addView(wxIcon[i],at(cx+px(24),y+px(336),px(34),px(34)));
-            wxHourT[i] = text(px(20),Color.WHITE,semibold);
-            wxHourT[i].setGravity(Gravity.CENTER);
-            root.addView(wxHourT[i],at(cx,y+px(375),px(82),-2));
+        wxRange.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        root.addView(wxRange, at(x + px(246), y + px(70), px(336), -2));
+        // The hourly row is gone; these only take the values the forecast fills in.
+        for (int i = 0; i < 6; i++) {
+            wxHour[i] = text(px(10), 0, regular);
+            wxHourT[i] = text(px(10), 0, regular);
+            if (i > 0) wxIcon[i] = new ImageView(this);
         }
     }
 
@@ -872,13 +858,20 @@ public class MainActivity extends Activity {
             }
         } else {
             String[][] items = {{"wallpaper", "Wallpaper"}, {"add", "Add app"}, {"city", "Weather place"},
-                    {"tv", "TV settings"}, {"text", "Small text"}};
-            int[][] icons = {LineIcon.PICTURE, LineIcon.PLUS, LineIcon.WIFI, LineIcon.SETTINGS, LineIcon.SETTINGS};
+                    {"tv", "TV settings"}, {"text", "Small text"},
+                    {"motion", motionOn ? "Motion: on" : "Motion: off"}};
+            int[][] icons = {LineIcon.PICTURE, LineIcon.PLUS, LineIcon.WIFI, LineIcon.SETTINGS, LineIcon.SETTINGS, LineIcon.SUN};
             for (int i = 0; i < items.length; i++) {
                 keys.add(SET + items[i][0]);
                 labels.add(Strings.t(items[i][1]));
                 lineIcons.add(icons[i]);
             }
+        }
+        if (mode != 0) {
+            w = px(240);
+            h = px(135);
+            tileW = w;
+            tileH = h;
         }
         int n = keys.size();
         int content = n * w + Math.max(0, n - 1) * g;
@@ -917,12 +910,13 @@ public class MainActivity extends Activity {
         cl.width = capW;
         capsule.setLayoutParams(cl);
         int qx = capX + px(12);
+        addIcon("control:center", "Quick controls", new LineIcon(LineIcon.SUN), qx);
+        qx += ib + ig;
         for (int q : quick) {
             addIcon(QUICK + QUICK_NAMES[q], Strings.t(QUICK_LABELS[q]), new LineIcon(QUICK_ICONS[q]), qx);
             qx += ib + ig;
         }
         netIcon = addIcon(NETWORK, Strings.t("Network"), null, qx);
-        addIcon("control:center", "Quick settings", new LineIcon(LineIcon.SETTINGS), qx + ib + ig);
         netState = -1;
         refreshNetwork();
 
@@ -1396,7 +1390,8 @@ public class MainActivity extends Activity {
             mode = 0;
             buildTiles();
             showAddMenu(-1);
-        } else if (name.equals("city")) showCities();
+        } else if (name.equals("motion")) toggleMotion();
+        else if (name.equals("city")) showCities();
         else if (name.equals("text")) editCredit();
         else try { startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
         catch (Exception ignored) {}
@@ -1757,7 +1752,7 @@ public class MainActivity extends Activity {
     }
 
     private int gridY(int i) {
-        return px(TILE_IN);
+        return (px(ROW_H) - tileH) / 2;
     }
 
     private View tile(String key) {
@@ -2382,5 +2377,123 @@ public class MainActivity extends Activity {
         @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
         @Override public int getIntrinsicWidth() { return 100; }
         @Override public int getIntrinsicHeight() { return 100; }
+    }
+
+    private void toggleMotion() {
+        motionOn = !motionOn;
+        getSharedPreferences(PREFS, 0).edit().putBoolean("motion", motionOn).apply();
+        if (scene != null) scene.run(motionOn);
+        buildTiles();
+    }
+
+    // The moving part of a wallpaper: three huge soft lights that drift, and a little weather of
+    // particles (stars, embers, bubbles or snow). It draws about 24 times a second while Home is on
+    // screen and not at all otherwise. Motion can be switched off in Settings.
+    private final class Scene extends View {
+        private final Bitmap[] blobs = new Bitmap[3];
+        private int kind;
+        private boolean running;
+        private final long t0 = System.nanoTime();
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final RectF dst = new RectF();
+        private final float[] fx = new float[70], fy = new float[70], fs = new float[70],
+                fv = new float[70], fp = new float[70];
+
+        Scene(Context c) {
+            super(c);
+            java.util.Random r = new java.util.Random(7);
+            for (int i = 0; i < 70; i++) {
+                fx[i] = r.nextFloat();
+                fy[i] = r.nextFloat();
+                fs[i] = r.nextFloat();
+                fv[i] = 0.4f + r.nextFloat();
+                fp[i] = r.nextFloat() * 6.2832f;
+            }
+        }
+
+        void setTheme(int[] m) {
+            boolean had = blobs[0] != null;
+            for (int i = 0; i < 3; i++) {
+                Bitmap b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                p.setShader(new RadialGradient(48, 48, 48, m[i], m[i] & 0x00FFFFFF, Shader.TileMode.CLAMP));
+                new Canvas(b).drawCircle(48, 48, 48, p);
+                blobs[i] = b; // the old one is left to the garbage collector: the renderer may still hold it
+            }
+            kind = m[3];
+            if (had) {
+                animate().cancel();
+                setAlpha(0f);
+                animate().alpha(1f).setDuration(700).start();
+            }
+            invalidate();
+        }
+
+        void run(boolean on) {
+            if (on && !running) {
+                running = true;
+                invalidate();
+            } else if (!on) {
+                running = false;
+            }
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            running = false;
+            super.onDetachedFromWindow();
+        }
+
+        @Override
+        protected void onDraw(Canvas cv) {
+            float w = getWidth(), h = getHeight(), sc = w / 1920f;
+            float t = (System.nanoTime() - t0) / 1e9f;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setAlpha(255);
+            for (int i = 0; i < 3; i++) {
+                if (blobs[i] == null) continue;
+                float r = h * (0.62f + 0.08f * (float) Math.sin(t * 0.21f + i * 2.1f));
+                float cx = w * (0.2f + 0.3f * i) + w * 0.12f * (float) Math.sin(t * (0.07f + 0.02f * i) + i * 1.7f);
+                float cy = h * (0.30f + 0.22f * (i % 2)) + h * 0.10f * (float) Math.cos(t * (0.06f + 0.025f * i) + i);
+                dst.set(cx - r, cy - r, cx + r, cy + r);
+                cv.drawBitmap(blobs[i], null, dst, paint);
+            }
+            if (kind == 1) {
+                paint.setStyle(Paint.Style.FILL);
+                for (int i = 0; i < 70; i++) {
+                    float tw = 0.5f + 0.5f * (float) Math.sin(t * (0.6f + fv[i]) + fp[i]);
+                    paint.setColor(0xFFFFFFFF);
+                    paint.setAlpha((int) (255 * (0.15f + 0.8f * tw * (0.4f + 0.6f * fs[i]))));
+                    cv.drawCircle(fx[i] * w, fy[i] * h * 0.62f, (1.2f + 2.2f * fs[i]) * sc, paint);
+                }
+            } else if (kind != 0) {
+                int n = kind == 4 ? 45 : kind == 3 ? 18 : 30;
+                float speed = kind == 4 ? 0.03f : 0.02f;
+                for (int i = 0; i < n; i++) {
+                    float p = (t * speed * fv[i] + fp[i]) % 1f;
+                    float a = (float) Math.sin(Math.PI * p);
+                    float x = fx[i] * w + (float) Math.sin(t * 0.5f * fv[i] + fp[i]) * 30f * sc;
+                    float y = kind == 4 ? h * (-0.05f + 1.1f * p) : h * (1.05f - 1.1f * p);
+                    if (kind == 2) {
+                        paint.setStyle(Paint.Style.FILL);
+                        paint.setColor(0xFFFFDCA0);
+                        paint.setAlpha((int) (200 * a));
+                        cv.drawCircle(x, y, (2f + 3.5f * fs[i]) * sc, paint);
+                    } else if (kind == 3) {
+                        paint.setStyle(Paint.Style.STROKE);
+                        paint.setStrokeWidth(2f * sc);
+                        paint.setColor(0xFFD8F6FF);
+                        paint.setAlpha((int) (120 * a));
+                        cv.drawCircle(x, y, (7f + 16f * fs[i]) * sc, paint);
+                    } else {
+                        paint.setStyle(Paint.Style.FILL);
+                        paint.setColor(0xFFFFFFFF);
+                        paint.setAlpha((int) (190 * a));
+                        cv.drawCircle(x, y, (1.6f + 2.6f * fs[i]) * sc, paint);
+                    }
+                }
+            }
+            if (running) postInvalidateDelayed(42);
+        }
     }
 }
