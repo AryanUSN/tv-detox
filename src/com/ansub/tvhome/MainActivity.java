@@ -114,9 +114,9 @@ public class MainActivity extends Activity {
     private static final int MARGIN = 120, RADIUS = 24;
     // The apps sit in one row, centred on a glass shelf. Tile size and gap, where the shelf sits and how
     // big it is, how far down inside it the tiles start, and how far the others slide from the focused one.
-    private static final int TILE_W = 200, TILE_H = 112, TILE_GAP = 26;
-    private static final int ROW_TOP = 628, ROW_H = 268, SHELF_W = 1680, TILE_IN = 78, PUSH = 22;
-    private static final float POP_SCALE = 1.18f; // how much bigger the focused app grows
+    private static final int TILE_W = 206, TILE_H = 118, TILE_GAP = 26;
+    private static final int ROW_TOP = 748, ROW_H = 208, SHELF_W = 1680, TILE_IN = 43, PUSH = 20;
+    private static final float POP_SCALE = 1.23f; // how much bigger the focused app grows
     private static final int ICON_TOP = 68, ICON_BUTTON = 64, ICON_SIZE = 34, ICON_GAP = 8; // top right
     // The tab bar at the top: what the shelf shows.
     private static final String TAB = "tab:", SET = "set:";
@@ -126,7 +126,7 @@ public class MainActivity extends Activity {
 
     // Wallpapers, saved by name. Each one is a scene: five sky colours top to bottom, a glow at the top
     // left, a glow on the horizon, and the colour of the dunes at their top and bottom.
-    private static final String[] WALLPAPER_NAMES = {"Dusk", "Ocean", "Dunes", "Aurora", "Rose", "Midnight", "Graphite"};
+    private static final String[] WALLPAPER_NAMES = {"Dusk", "Ocean", "Dunes", "Aurora", "Rose", "Midnight", "Graphite", "Solar", "Glacier", "Velvet"};
     private static final int[][] WALLPAPERS = {
         {0xFF1C2A66, 0xFF59489B, 0xFFD9788F, 0xFFF4AE78, 0xFF35213F, 0x8C7896FF, 0xD9FFC478, 0x8C5A285A, 0xE61E1028},
         {0xFF06243A, 0xFF0B4F6E, 0xFF1E86A0, 0xFF7FD0C4, 0xFF0A2A33, 0x8C4AA8FF, 0xD9B8FFE8, 0x8C0E4A5A, 0xE6051A22},
@@ -135,6 +135,9 @@ public class MainActivity extends Activity {
         {0xFF3A1040, 0xFF8A2A6E, 0xFFD8508A, 0xFFFF9A9A, 0xFF3A1030, 0x8CFF8AD0, 0xD9FFC8A0, 0x8C7A2058, 0xE6200820},
         {0xFF070A1A, 0xFF101E4A, 0xFF24307A, 0xFF4A4AA0, 0xFF0A0A1E, 0x8C5A7AFF, 0xD98A78FF, 0x8C1A1E4E, 0xE6050618},
         {0xFF0C0D0F, 0xFF1A1C20, 0xFF2A2D33, 0xFF4A4F58, 0xFF0C0D0F, 0x66FFFFFF, 0xA0C8D2E0, 0x8C26282C, 0xE6060708},
+        {0xFF160E25, 0xFF51304D, 0xFFD17C5A, 0xFFFFC08A, 0xFF291824, 0x8CFFB77A, 0xD9FFDD99, 0x8C793E52, 0xE618111E},
+        {0xFF071A30, 0xFF164664, 0xFF3E86A0, 0xFF9FE5F1, 0xFF092034, 0x8C5ADFFF, 0xD9C9F9FF, 0x8C1C4865, 0xE6061224},
+        {0xFF160D28, 0xFF382456, 0xFF764B9C, 0xFFC18BCF, 0xFF180D2D, 0x8CC08CFF, 0xD9FFD5FF, 0x8C43245E, 0xE60B071A},
     };
     private float scale = 1f;
 
@@ -175,6 +178,9 @@ public class MainActivity extends Activity {
 
     private int mode;        // the tab: 0 Apps, 1 Inputs, 2 Settings
     private int rowLeft;     // where the first tile sits inside the shelf (the row is centred)
+    private FrameLayout quickPanel;
+    private View heroGlow;
+    private boolean quickOpen;
     private View capsule;    // the glass pill behind the round icons, top right
     private TextView wxCity, wxTemp, wxCond, wxRange;
     private final TextView[] wxHour = new TextView[6];
@@ -256,7 +262,7 @@ public class MainActivity extends Activity {
         moveHint = text(px(22), 0xCCFFFFFF, regular);
         moveHint.setText(Strings.t("Use the arrows to move it, then press OK"));
         moveHint.setVisibility(View.GONE);
-        root.addView(moveHint, at(px(MARGIN), px(592), -2, -2));
+        root.addView(moveHint, at(px(MARGIN), px(716), -2, -2));
 
         buildChrome();
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
@@ -409,7 +415,7 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() { /* home screen: nothing to go back to */ }
+    public void onBackPressed() { if (quickOpen) toggleQuick(false); }
 
     // The wallpaper is drawn once into a small bitmap (a sky, two glows, two dunes) and the window just
     // stretches it, so it costs nothing while the TV sits idle. Smooth gradients stay smooth stretched.
@@ -445,7 +451,18 @@ public class MainActivity extends Activity {
     }
 
     private void showWallpaper(int i) {
-        getWindow().setBackgroundDrawable(background(WALLPAPERS[i]));
+        Drawable previous = getWindow().getDecorView().getBackground();
+        Drawable next = background(WALLPAPERS[i]);
+        getWindow().setBackgroundDrawable(next);
+        if (root != null && previous != null) {
+            View fade = new View(this);
+            fade.setBackground(previous);
+            fade.setFocusable(false);
+            root.addView(fade, 0, at(0, 0,
+                    getResources().getDisplayMetrics().widthPixels, px(1080)));
+            fade.animate().alpha(0f).setDuration(650).setInterpolator(EASE)
+                    .withEndAction(() -> root.removeView(fade)).start();
+        }
     }
 
     // The wallpapers, each with a small dot of its colours. Moving through the list shows each one
@@ -495,157 +512,202 @@ public class MainActivity extends Activity {
 
     // The glass (tab bar, icon pill, weather, quick controls, app shelf), the sideways app row on the
     // shelf, the name under it and the small print.
+    // Aurora 2: a cinematic hero, compact weather and a genuinely hidden control drawer.
     private void buildChrome() {
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int m = px(MARGIN), cw = px(SHELF_W);
-
-        View bar = new View(this);
-        bar.setBackground(glass(36));
-        root.addView(bar, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
+        View nav = new View(this);
+        nav.setBackground(glass(40));
+        root.addView(nav, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
         capsule = new View(this);
         capsule.setBackground(glass(38));
         root.addView(capsule, at(0, px(62), px(100), px(76)));
-        buildWeather(m);
-        buildControls(m + px(1090));
-        View shelf = new View(this);
-        shelf.setBackground(glass(52));
-        root.addView(shelf, at(m, px(ROW_TOP), cw, px(ROW_H)));
 
-        // Not shown any more, but the focus code still fills them in.
+        buildHero(m);
+        buildWeather(m + px(1090));
+        View shelf = new View(this);
+        shelf.setBackground(glass(48));
+        root.addView(shelf, at(m, px(ROW_TOP), cw, px(ROW_H)));
         sectionLabel = text(px(20), 0x9EFFFFFF, semibold);
         countText = text(px(20), 0x9EFFFFFF, semibold);
-
-        // The name of the focused app, under the row.
-        nameText = text(px(24), 0xE6FFFFFF, semibold);
+        nameText = text(px(23), 0xEEFFFFFF, semibold);
         nameText.setSingleLine(true);
         nameText.setGravity(Gravity.CENTER);
-        root.addView(nameText, at(m, px(ROW_TOP + 214), cw, -2));
-
-        // The apps: one row that slides sideways when there are more than fit.
+        root.addView(nameText, at(m, px(ROW_TOP + 178), cw, -2));
         appsScroll = new HorizontalScrollView(this);
         appsScroll.setHorizontalScrollBarEnabled(false);
         appsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         appsScroll.setClipChildren(false);
         appsScroll.setClipToPadding(false);
-        appsScroll.setHorizontalFadingEdgeEnabled(true);
-        appsScroll.setFadingEdgeLength(px(80));
         appsRow = new FrameLayout(this);
         appsRow.setClipChildren(false);
         appsScroll.addView(appsRow, new FrameLayout.LayoutParams(-2, -1));
         root.addView(appsScroll, at(m, px(ROW_TOP), cw, px(ROW_H)));
 
-        // The small print, centred at the bottom: press OK for a surprise, hold OK to change the text.
-        credit = text(px(20), 0x99FFFFFF, regular);
+        credit = text(px(18), 0xB0FFFFFF, regular);
         credit.setText(creditText());
-        credit.setSingleLine(true);
         credit.setGravity(Gravity.CENTER);
         credit.setFocusable(true);
-        credit.setPadding(px(12), px(8), px(12), px(8));
         credit.setOnClickListener(v -> surprise());
         credit.setOnLongClickListener(v -> { editCredit(); return true; });
         credit.setOnFocusChangeListener((v, has) -> {
-            credit.setTextColor(has ? 0xFFFFFFFF : 0x99FFFFFF);
+            credit.setTextColor(has ? 0xFFFFFFFF : 0xB0FFFFFF);
             credit.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f).setStartDelay(0)
                     .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
         });
-        root.addView(credit, at((screenW - px(420)) / 2, px(1004), px(420), -2));
-        credit.setAlpha(0f);
-        credit.animate().alpha(1f).setStartDelay(1100).setDuration(700).start();
+        root.addView(credit, at((screenW - px(420)) / 2, px(1012), px(420), px(40)));
 
-        // One place that follows focus: the name under the row and how the row opens up.
+        quickPanel = new FrameLayout(this);
+        quickPanel.setClipChildren(false);
+        root.addView(quickPanel, at(screenW - m - px(590), px(158), px(590), px(382)));
+        buildControls(0);
+        quickPanel.setVisibility(View.GONE);
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> onFocusMoved(newF));
+    }
+
+    private void buildHero(int x) {
+        int y = px(265), w = px(1058), h = px(420);
+        FrameLayout hero = new FrameLayout(this);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xEF101B43, 0xD92D275E, 0xA5105478, 0xE9131738});
+        bg.setCornerRadius(px(42));
+        bg.setStroke(Math.max(1, px(2)), 0x66C9E6FF);
+        hero.setBackground(bg);
+        hero.setClipToOutline(true);
+        root.addView(hero, at(x, y, w, h));
+        heroGlow = new View(this);
+        heroGlow.setBackground(radial(0x6F879FFF, .78f, .38f, px(480)));
+        hero.addView(heroGlow, at(px(370), -px(125), px(700), px(690)));
+        heroGlow.animate().translationX(px(-110)).alpha(.65f).setDuration(16000)
+                .setInterpolator(EASE).withEndAction(() -> {
+                    if (heroGlow != null && heroGlow.isAttachedToWindow())
+                        heroGlow.animate().translationX(0).alpha(1f).setDuration(16000).start();
+                }).start();
+        TextView overline = text(px(21), 0xBFC8D8FF, semibold);
+        overline.setLetterSpacing(.18f);
+        overline.setText("AURORA  /  YOUR HOME");
+        hero.addView(overline, at(px(55), px(54), -2, -2));
+        TextView headline = text(px(72), Color.WHITE, light);
+        headline.setText("Everything. In one place.");
+        headline.setSingleLine(true);
+        headline.setLetterSpacing(-.035f);
+        hero.addView(headline, at(px(52), px(112), px(935), -2));
+        TextView subtitle = text(px(26), 0xCDE7EEFF, regular);
+        subtitle.setText("Your apps, connected to a calmer, more cinematic home.");
+        hero.addView(subtitle, at(px(57), px(216), px(900), -2));
+        TextView action = text(px(26), Color.WHITE, semibold);
+        action.setText("Explore apps   ›");
+        action.setGravity(Gravity.CENTER);
+        action.setBackground(glass(30));
+        action.setFocusable(true);
+        action.setOnClickListener(v -> { if (!rowApps.isEmpty()) { View t = tile(rowApps.get(0)); if (t != null) t.requestFocus(); } });
+        action.setOnFocusChangeListener((v, has) -> v.animate().scaleX(has?1.08f:1f)
+                .scaleY(has?1.08f:1f).setDuration(260).setInterpolator(POP).start());
+        hero.addView(action, at(px(55), px(300), px(260), px(66)));
+    }
+
+    private void toggleQuick(boolean show) {
+        if (quickPanel == null || quickOpen == show) return;
+        quickOpen = show;
+        quickPanel.animate().cancel();
+        if (show) {
+            quickPanel.bringToFront();
+            quickPanel.setVisibility(View.VISIBLE);
+            quickPanel.setAlpha(0f);
+            quickPanel.setTranslationY(-px(34));
+            quickPanel.setScaleY(.88f);
+            quickPanel.setPivotY(0);
+            quickPanel.animate().alpha(1f).translationY(0).scaleY(1f)
+                    .setDuration(390).setInterpolator(POP).start();
+            if (brightSlider != null) brightSlider.requestFocus();
+        } else {
+            View next = tile(TAB + mode);
+            if (next != null) next.requestFocus();
+            quickPanel.animate().alpha(0f).translationY(-px(30)).scaleY(.9f)
+                    .setDuration(210).setInterpolator(EASE)
+                    .withEndAction(() -> quickPanel.setVisibility(View.GONE)).start();
+        }
     }
 
     // The weather card: the temperature now, then the next hours. Filled in when the forecast arrives.
     private void buildWeather(int x) {
-        int y = px(262);
+        int y = px(265);
         View card = new View(this);
-        final GradientDrawable cardBg = glass(44);
+        final GradientDrawable cardBg = glass(42);
         card.setBackground(cardBg);
         card.setFocusable(true);
-        card.setOnFocusChangeListener((v, has) ->
-                cardBg.setStroke(has ? Math.max(2, px(4)) : Math.max(1, px(2)), has ? 0xFFFFFFFF : 0x47FFFFFF));
+        card.setOnFocusChangeListener((v, has) -> cardBg.setStroke(px(has ? 4 : 2), has ? 0xFFFFFFFF : 0x47FFFFFF));
         card.setOnClickListener(v -> showCities());
-        root.addView(card, at(x, y, px(1050), px(318)));
-        TextView change = text(px(18), 0x99FFFFFF, regular);
-        change.setText("OK to change place");
-        change.setGravity(Gravity.END);
-        root.addView(change, at(x + px(790), y + px(40), px(220), -2));
-        wxCity = text(px(24), 0xE6FFFFFF, semibold);
-        wxCity.setLetterSpacing(0.12f);
+        root.addView(card, at(x, y, px(590), px(420)));
+        wxCity = text(px(23), 0xDDFFFFFF, semibold);
+        wxCity.setLetterSpacing(.13f);
         wxCity.setText(city()[0].toUpperCase(java.util.Locale.ROOT));
-        root.addView(wxCity, at(x + px(52), y + px(36), -2, -2));
-        wxTemp = text(px(150), Color.WHITE, light);
+        root.addView(wxCity, at(x + px(38), y + px(31), -2, -2));
+        wxTemp = text(px(112), Color.WHITE, light);
         wxTemp.setIncludeFontPadding(false);
-        wxTemp.setLetterSpacing(-0.05f);
         wxTemp.setText("--°");
-        root.addView(wxTemp, at(x + px(46), y + px(70), -2, -2));
-        wxCond = text(px(28), Color.WHITE, semibold);
-        wxCond.setSingleLine(true);
-        wxCond.setText("No forecast yet");
-        root.addView(wxCond, at(x + px(52), y + px(232), px(290), -2));
-        wxRange = text(px(21), 0xCCFFFFFF, regular);
+        root.addView(wxTemp, at(x + px(34), y + px(76), -2, -2));
+        wxCond = text(px(27), Color.WHITE, semibold);
+        wxCond.setText("Loading weather");
+        root.addView(wxCond, at(x + px(39), y + px(205), px(480), -2));
+        wxRange = text(px(22), 0xCCFFFFFF, regular);
         wxRange.setSingleLine(true);
-        wxRange.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        root.addView(wxRange, at(x + px(52), y + px(272), px(296), -2));
-        View div = new View(this);
-        div.setBackgroundColor(0x33FFFFFF);
-        root.addView(div, at(x + px(360), y + px(50), Math.max(1, px(2)), px(218)));
-        TextView hdr = text(px(21), 0xC7FFFFFF, semibold);
-        hdr.setLetterSpacing(0.14f);
-        hdr.setText("NEXT HOURS");
-        root.addView(hdr, at(x + px(408), y + px(44), -2, -2));
-        for (int i = 0; i < 6; i++) {
-            int cx = x + px(408) + i * px(104);
-            wxHour[i] = text(px(23), 0xE0FFFFFF, semibold);
+        root.addView(wxRange, at(x + px(39), y + px(245), px(510), -2));
+        View line = new View(this);
+        line.setBackgroundColor(0x35FFFFFF);
+        root.addView(line, at(x+px(38),y+px(288),px(510),px(1)));
+        for (int i=0;i<6;i++) {
+            int cx = x + px(30 + i * 89);
+            wxHour[i] = text(px(19), 0xDDFFFFFF, semibold);
             wxHour[i].setGravity(Gravity.CENTER);
-            root.addView(wxHour[i], at(cx, y + px(104), px(96), -2));
+            root.addView(wxHour[i],at(cx,y+px(306),px(82),-2));
             wxIcon[i] = new ImageView(this);
-            root.addView(wxIcon[i], at(cx + px(26), y + px(152), px(44), px(44)));
-            wxHourT[i] = text(px(28), Color.WHITE, semibold);
+            root.addView(wxIcon[i],at(cx+px(24),y+px(336),px(34),px(34)));
+            wxHourT[i] = text(px(20),Color.WHITE,semibold);
             wxHourT[i].setGravity(Gravity.CENTER);
-            root.addView(wxHourT[i], at(cx, y + px(214), px(96), -2));
+            root.addView(wxHourT[i],at(cx,y+px(375),px(82),-2));
         }
     }
 
     // The quick controls card: brightness, volume, the picture mode and the sound mode.
     private void buildControls(int x) {
-        int y = px(262), w = px(502), cx = x + px(44);
+        int y = 0, w = px(502), cx = x + px(44);
         View card = new View(this);
-        card.setBackground(glass(44));
-        root.addView(card, at(x, y, px(590), px(318)));
+        GradientDrawable drawerBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xF21A2442, 0xF51A1C35, 0xED101B31});
+        drawerBg.setCornerRadius(px(38));
+        drawerBg.setStroke(px(2), 0x7AD6E7FF);
+        card.setBackground(drawerBg);
+        quickPanel.addView(card, at(x, y, px(590), px(382)));
         TextView hdr = text(px(20), 0xC7FFFFFF, semibold);
         hdr.setLetterSpacing(0.14f);
         hdr.setText("QUICK CONTROLS");
-        root.addView(hdr, at(cx, y + px(26), -2, -2));
+        quickPanel.addView(hdr, at(cx, y + px(26), -2, -2));
 
         TextView bl = text(px(23), Color.WHITE, semibold);
         bl.setText("Brightness");
-        root.addView(bl, at(cx, y + px(54), -2, -2));
+        quickPanel.addView(bl, at(cx, y + px(54), -2, -2));
         brightPct = text(px(23), 0xCCFFFFFF, semibold);
         brightPct.setGravity(Gravity.END);
-        root.addView(brightPct, at(cx, y + px(54), w, -2));
+        quickPanel.addView(brightPct, at(cx, y + px(54), w, -2));
         brightSlider = new Slider(this, new LineIcon(LineIcon.SUN), v -> setBrightness(v));
-        root.addView(brightSlider, at(cx, y + px(82), w, px(52)));
-
-        // The picture mode: five chips. Hold OK on one to save the TV's current mode to it.
-        int g = px(8), pn = PIC_MODES.length, pw = (w - (pn - 1) * g) / pn;
-        for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(136), pw, i);
-
+        quickPanel.addView(brightSlider, at(cx, y + px(82), w, px(52)));
 
         TextView vl = text(px(23), Color.WHITE, semibold);
         vl.setText("Volume");
-        root.addView(vl, at(cx, y + px(184), -2, -2));
+        quickPanel.addView(vl, at(cx, y + px(136), -2, -2));
         volPct = text(px(23), 0xCCFFFFFF, semibold);
         volPct.setGravity(Gravity.END);
-        root.addView(volPct, at(cx, y + px(184), w, -2));
+        quickPanel.addView(volPct, at(cx, y + px(136), w, -2));
         volSlider = new Slider(this, new LineIcon(LineIcon.SOUND), v -> setVolume(v));
-        root.addView(volSlider, at(cx, y + px(212), w, px(52)));
+        quickPanel.addView(volSlider, at(cx, y + px(164), w, px(52)));
 
-        
+        // The picture mode: five chips. Hold OK on one to save the TV's current mode to it.
+        int g = px(8), pn = PIC_MODES.length, pw = (w - (pn - 1) * g) / pn;
+        for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(226), pw, i);
 
         // The sound mode: four chips, or one button to the TV's own sound page when this TV can't do it.
-        int cy = y + px(274);
+        int cy = y + px(293);
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
         if (!soundSupported()) {
             addChip("More sound settings", cx, cy, w, -1);
@@ -675,7 +737,7 @@ public class MainActivity extends Activity {
         t.setOnLongClickListener(v -> { learnPicture(idx); return true; });
         picChips.add(t);
         picBgs.add(bg);
-        root.addView(t, at(x, y, w, px(40)));
+        quickPanel.addView(t, at(x, y, w, px(40)));
     }
 
     // The TV's own number for a picture mode, saved by holding OK on its chip (or sent with --es picmodes).
@@ -749,7 +811,7 @@ public class MainActivity extends Activity {
         });
         chips.add(t);
         chipBgs.add(bg);
-        root.addView(t, at(x, y, w, px(40)));
+        quickPanel.addView(t, at(x, y, w, px(40)));
     }
 
     private void paintChips() {
@@ -847,7 +909,7 @@ public class MainActivity extends Activity {
         // Added last, so the first app keeps first focus; Up from the apps reaches them.
         List<Integer> quick = quickList();
         int ib = px(ICON_BUTTON), ig = px(ICON_GAP);
-        int count = quick.size() + 1;
+        int count = quick.size() + 2;
         int capW = count * ib + (count - 1) * ig + px(24);
         int capX = screenW - m - capW;
         FrameLayout.LayoutParams cl = (FrameLayout.LayoutParams) capsule.getLayoutParams();
@@ -860,6 +922,7 @@ public class MainActivity extends Activity {
             qx += ib + ig;
         }
         netIcon = addIcon(NETWORK, Strings.t("Network"), null, qx);
+        addIcon("control:center", "Quick settings", new LineIcon(LineIcon.SETTINGS), qx + ib + ig);
         netState = -1;
         refreshNetwork();
 
@@ -995,7 +1058,7 @@ public class MainActivity extends Activity {
             if (has) focusedKey = key;
             if (glass) bg.setColor(has ? 0x38FFFFFF : 0x13FFFFFF);
             v.animate().scaleX(has ? POP_SCALE : 1f).scaleY(has ? POP_SCALE : 1f).translationZ(has ? px(26) : 0)
-                    .setStartDelay(0).setDuration(has ? 300 : 200).setInterpolator(has ? POP : EASE).withLayer().start();
+                    .setStartDelay(0).setDuration(has ? 380 : 230).setInterpolator(has ? POP : EASE).withLayer().start();
             ring.animate().alpha(has ? 1f : 0f).setStartDelay(0).setDuration(has ? 200 : 140).start();
             if (has && !intro) sweep(shine, sw, w);
         });
@@ -1294,6 +1357,7 @@ public class MainActivity extends Activity {
 
     private void open(String key) {
         Intent i;
+        if (key.equals("control:center")) { toggleQuick(!quickOpen); return; }
         if (key.startsWith(TAB)) {
             int next = Integer.parseInt(key.substring(TAB.length()));
             if (next != mode) {
