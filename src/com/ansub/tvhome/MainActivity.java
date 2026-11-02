@@ -111,14 +111,12 @@ public class MainActivity extends Activity {
     private static final String TCL_SHOW_WINDOW = "com.tcl.settings.SHOW_WINDOW";
 
     // Layout is designed at 1920x1080 and scaled to the TV's real UI size by px().
-    private static final int MARGIN = 120, RADIUS = 28;
+    private static final int MARGIN = 120, RADIUS = 24;
     // The apps sit in one row, centred on a glass shelf. Tile size and gap, where the shelf sits and how
     // big it is, how far down inside it the tiles start, and how far the others slide from the focused one.
-    private static final int TILE_W = 300, TILE_H = 169, TILE_GAP = 30;
-    private static final int ROW_TOP = 400, ROW_H = 600, SHELF_W = 1780, SHELF_X = 70, TILE_IN = 95, PUSH = 28;
-    // Apps page (a mosaic): the first app is a big card, the rest are small cards, all about 16:9.
-    private static final int U_W = 285, U_H = 160, U_GAP = 30, OFF_X = 30, OFF_Y = 30;
-    private static final float POP_SCALE = 1.08f; // how much bigger the focused app grows
+    private static final int TILE_W = 200, TILE_H = 112, TILE_GAP = 26;
+    private static final int ROW_TOP = 628, ROW_H = 268, SHELF_W = 1680, TILE_IN = 78, PUSH = 22;
+    private static final float POP_SCALE = 1.18f; // how much bigger the focused app grows
     private static final int ICON_TOP = 68, ICON_BUTTON = 64, ICON_SIZE = 34, ICON_GAP = 8; // top right
     // The tab bar at the top: what the shelf shows.
     private static final String TAB = "tab:", SET = "set:";
@@ -128,7 +126,7 @@ public class MainActivity extends Activity {
 
     // Wallpapers, saved by name. Each one is a scene: five sky colours top to bottom, a glow at the top
     // left, a glow on the horizon, and the colour of the dunes at their top and bottom.
-    private static final String[] WALLPAPER_NAMES = {"Dusk", "Ocean", "Dunes", "Aurora", "Rose", "Midnight", "Graphite", "Solar", "Glacier", "Velvet"};
+    private static final String[] WALLPAPER_NAMES = {"Dusk", "Ocean", "Dunes", "Aurora", "Rose", "Midnight", "Graphite"};
     private static final int[][] WALLPAPERS = {
         {0xFF1C2A66, 0xFF59489B, 0xFFD9788F, 0xFFF4AE78, 0xFF35213F, 0x8C7896FF, 0xD9FFC478, 0x8C5A285A, 0xE61E1028},
         {0xFF06243A, 0xFF0B4F6E, 0xFF1E86A0, 0xFF7FD0C4, 0xFF0A2A33, 0x8C4AA8FF, 0xD9B8FFE8, 0x8C0E4A5A, 0xE6051A22},
@@ -137,23 +135,6 @@ public class MainActivity extends Activity {
         {0xFF3A1040, 0xFF8A2A6E, 0xFFD8508A, 0xFFFF9A9A, 0xFF3A1030, 0x8CFF8AD0, 0xD9FFC8A0, 0x8C7A2058, 0xE6200820},
         {0xFF070A1A, 0xFF101E4A, 0xFF24307A, 0xFF4A4AA0, 0xFF0A0A1E, 0x8C5A7AFF, 0xD98A78FF, 0x8C1A1E4E, 0xE6050618},
         {0xFF0C0D0F, 0xFF1A1C20, 0xFF2A2D33, 0xFF4A4F58, 0xFF0C0D0F, 0x66FFFFFF, 0xA0C8D2E0, 0x8C26282C, 0xE6060708},
-        {0xFF160E25, 0xFF51304D, 0xFFD17C5A, 0xFFFFC08A, 0xFF291824, 0x8CFFB77A, 0xD9FFDD99, 0x8C793E52, 0xE618111E},
-        {0xFF071A30, 0xFF164664, 0xFF3E86A0, 0xFF9FE5F1, 0xFF092034, 0x8C5ADFFF, 0xD9C9F9FF, 0x8C1C4865, 0xE6061224},
-        {0xFF160D28, 0xFF382456, 0xFF764B9C, 0xFFC18BCF, 0xFF180D2D, 0x8CC08CFF, 0xD9FFD5FF, 0x8C43245E, 0xE60B071A},
-    };
-    // The motion of each wallpaper (same order): three drifting lights, then the particles:
-    // 0 none, 1 stars, 2 embers, 3 bubbles, 4 snow.
-    private static final int[][] MOTION = {
-        {0x66FF9A70, 0x557A8CFF, 0x55FF6FA8, 2},
-        {0x6640D8E0, 0x553C8CFF, 0x5530E0B0, 3},
-        {0x66FFB070, 0x55FF7A5A, 0x55FFD890, 2},
-        {0x7050FFB0, 0x608C5AF0, 0x5530D8E8, 1},
-        {0x66FF7AC0, 0x55FFB0A0, 0x55C060FF, 2},
-        {0x555A7AFF, 0x558A5AFF, 0x4030C0FF, 1},
-        {0x40FFFFFF, 0x30A0B4C8, 0x28FFFFFF, 0},
-        {0x66FFB060, 0x55FF6A5A, 0x55FFE090, 2},
-        {0x6650D8FF, 0x55A0F0FF, 0x554C90FF, 4},
-        {0x66B070FF, 0x55FF70D0, 0x554C60FF, 2},
     };
     private float scale = 1f;
 
@@ -194,12 +175,6 @@ public class MainActivity extends Activity {
 
     private int mode;        // the tab: 0 Apps, 1 Inputs, 2 Settings
     private int rowLeft;     // where the first tile sits inside the shelf (the row is centred)
-    private FrameLayout quickPanel;
-    private View heroGlow, shelf;
-    private GradientDrawable glowShape;
-    private boolean quickOpen;
-    private Scene scene;      // the moving part of the wallpaper
-    private boolean motionOn = true;
     private View capsule;    // the glass pill behind the round icons, top right
     private TextView wxCity, wxTemp, wxCond, wxRange;
     private final TextView[] wxHour = new TextView[6];
@@ -249,7 +224,6 @@ public class MainActivity extends Activity {
         saveConfig(getIntent());
         loadFonts();
         scale = getResources().getDisplayMetrics().widthPixels / 1920f;
-        motionOn = getSharedPreferences(PREFS, 0).getBoolean("motion", true);
         showWallpaper(wallpaper());
 
         ScrollView scroller = new ScrollView(this);
@@ -282,10 +256,9 @@ public class MainActivity extends Activity {
         moveHint = text(px(22), 0xCCFFFFFF, regular);
         moveHint.setText(Strings.t("Use the arrows to move it, then press OK"));
         moveHint.setVisibility(View.GONE);
-        root.addView(moveHint, at(px(760), px(352), -2, -2));
+        root.addView(moveHint, at(px(MARGIN), px(592), -2, -2));
 
         buildChrome();
-        scene.setTheme(MOTION[wallpaper()]);
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
         if (soundMode != 0) applySound(soundMode);
         root.postDelayed(wxTick, 30 * 60 * 1000L);
@@ -395,15 +368,8 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        if (scene != null) scene.run(false);
-    }
-
-    @Override
     protected void onResume() {
         super.onResume();
-        if (scene != null) scene.run(motionOn);
         // Rebuild only when apps were installed, removed or updated.
         if (dirty) {
             dirty = false;
@@ -443,7 +409,7 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() { if (quickOpen) toggleQuick(false); }
+    public void onBackPressed() { /* home screen: nothing to go back to */ }
 
     // The wallpaper is drawn once into a small bitmap (a sky, two glows, two dunes) and the window just
     // stretches it, so it costs nothing while the TV sits idle. Smooth gradients stay smooth stretched.
@@ -479,19 +445,7 @@ public class MainActivity extends Activity {
     }
 
     private void showWallpaper(int i) {
-        Drawable previous = getWindow().getDecorView().getBackground();
-        Drawable next = background(WALLPAPERS[i]);
-        getWindow().setBackgroundDrawable(next);
-        if (scene != null) scene.setTheme(MOTION[i]);
-        if (root != null && previous != null) {
-            View fade = new View(this);
-            fade.setBackground(previous);
-            fade.setFocusable(false);
-            root.addView(fade, 0, at(0, 0,
-                    getResources().getDisplayMetrics().widthPixels, px(1080)));
-            fade.animate().alpha(0f).setDuration(650).setInterpolator(EASE)
-                    .withEndAction(() -> root.removeView(fade)).start();
-        }
+        getWindow().setBackgroundDrawable(background(WALLPAPERS[i]));
     }
 
     // The wallpapers, each with a small dot of its colours. Moving through the list shows each one
@@ -541,171 +495,154 @@ public class MainActivity extends Activity {
 
     // The glass (tab bar, icon pill, weather, quick controls, app shelf), the sideways app row on the
     // shelf, the name under it and the small print.
-    // Aurora 2: a cinematic hero, compact weather and a genuinely hidden control drawer.
     private void buildChrome() {
         int screenW = getResources().getDisplayMetrics().widthPixels;
-        int m = px(MARGIN), cw = px(SHELF_W), sx = px(SHELF_X);
-        scene = new Scene(this);
-        root.addView(scene, 0, at(0, 0, screenW, px(1080)));
-        // A big soft glow behind the shelf that takes the colour of the selected app.
-        glowShape = new GradientDrawable();
-        glowShape.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        glowShape.setGradientRadius(px(760));
-        glowShape.setGradientCenter(0.5f, 0.5f);
-        glowShape.setColors(new int[] {0x00000000, 0x00000000});
-        heroGlow = new View(this);
-        heroGlow.setBackground(glowShape);
-        root.addView(heroGlow, 1, at(px(160), px(ROW_TOP) - px(260), px(1600), px(800)));
-        View nav = new View(this);
-        nav.setBackground(glass(40));
-        root.addView(nav, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
+        int m = px(MARGIN), cw = px(SHELF_W);
+
+        View bar = new View(this);
+        bar.setBackground(glass(36));
+        root.addView(bar, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
         capsule = new View(this);
         capsule.setBackground(glass(38));
         root.addView(capsule, at(0, px(62), px(100), px(76)));
-
         buildWeather(m);
-        shelf = new View(this);
-        shelf.setBackground(glass(48));
-        root.addView(shelf, at(sx, px(ROW_TOP), cw, px(ROW_H)));
+        buildControls(m + px(1090));
+        View shelf = new View(this);
+        shelf.setBackground(glass(52));
+        root.addView(shelf, at(m, px(ROW_TOP), cw, px(ROW_H)));
+
+        // Not shown any more, but the focus code still fills them in.
         sectionLabel = text(px(20), 0x9EFFFFFF, semibold);
         countText = text(px(20), 0x9EFFFFFF, semibold);
-        nameText = text(px(40), 0xF2FFFFFF, semibold);
+
+        // The name of the focused app, under the row.
+        nameText = text(px(24), 0xE6FFFFFF, semibold);
         nameText.setSingleLine(true);
-        nameText.setGravity(Gravity.END);
-        root.addView(nameText, at(px(760), px(ROW_TOP - 110), px(1060), -2));
+        nameText.setGravity(Gravity.CENTER);
+        root.addView(nameText, at(m, px(ROW_TOP + 214), cw, -2));
+
+        // The apps: one row that slides sideways when there are more than fit.
         appsScroll = new HorizontalScrollView(this);
         appsScroll.setHorizontalScrollBarEnabled(false);
         appsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         appsScroll.setClipChildren(false);
         appsScroll.setClipToPadding(false);
         appsScroll.setHorizontalFadingEdgeEnabled(true);
-        appsScroll.setFadingEdgeLength(px(70));
+        appsScroll.setFadingEdgeLength(px(80));
         appsRow = new FrameLayout(this);
         appsRow.setClipChildren(false);
         appsScroll.addView(appsRow, new FrameLayout.LayoutParams(-2, -1));
-        root.addView(appsScroll, at(sx, px(ROW_TOP), cw, px(ROW_H)));
+        root.addView(appsScroll, at(m, px(ROW_TOP), cw, px(ROW_H)));
 
-        credit = text(px(18), 0xB0FFFFFF, regular);
+        // The small print, centred at the bottom: press OK for a surprise, hold OK to change the text.
+        credit = text(px(20), 0x99FFFFFF, regular);
         credit.setText(creditText());
+        credit.setSingleLine(true);
         credit.setGravity(Gravity.CENTER);
         credit.setFocusable(true);
+        credit.setPadding(px(12), px(8), px(12), px(8));
         credit.setOnClickListener(v -> surprise());
         credit.setOnLongClickListener(v -> { editCredit(); return true; });
         credit.setOnFocusChangeListener((v, has) -> {
-            credit.setTextColor(has ? 0xFFFFFFFF : 0xB0FFFFFF);
+            credit.setTextColor(has ? 0xFFFFFFFF : 0x99FFFFFF);
             credit.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f).setStartDelay(0)
                     .setDuration(has ? 240 : 160).setInterpolator(has ? POP : EASE).start();
         });
-        root.addView(credit, at((screenW - px(420)) / 2, px(1012), px(420), px(40)));
+        root.addView(credit, at((screenW - px(420)) / 2, px(1004), px(420), -2));
+        credit.setAlpha(0f);
+        credit.animate().alpha(1f).setStartDelay(1100).setDuration(700).start();
 
-        quickPanel = new FrameLayout(this);
-        quickPanel.setClipChildren(false);
-        root.addView(quickPanel, at(screenW - m - px(590), px(158), px(590), px(382)));
-        buildControls(0);
-        quickPanel.setVisibility(View.GONE);
+        // One place that follows focus: the name under the row and how the row opens up.
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> onFocusMoved(newF));
     }
 
-    private void toggleQuick(boolean show) {
-        if (quickPanel == null || quickOpen == show) return;
-        quickOpen = show;
-        quickPanel.animate().cancel();
-        if (show) {
-            quickPanel.bringToFront();
-            quickPanel.setVisibility(View.VISIBLE);
-            quickPanel.setAlpha(0f);
-            quickPanel.setTranslationY(-px(34));
-            quickPanel.setScaleY(.88f);
-            quickPanel.setPivotY(0);
-            quickPanel.animate().alpha(1f).translationY(0).scaleY(1f)
-                    .setDuration(390).setInterpolator(POP).start();
-            if (brightSlider != null) brightSlider.requestFocus();
-        } else {
-            View next = tile(TAB + mode);
-            if (next != null) next.requestFocus();
-            quickPanel.animate().alpha(0f).translationY(-px(30)).scaleY(.9f)
-                    .setDuration(210).setInterpolator(EASE)
-                    .withEndAction(() -> quickPanel.setVisibility(View.GONE)).start();
-        }
-    }
-
     // The weather card: the temperature now, then the next hours. Filled in when the forecast arrives.
-    // A slim weather pill under the clock: temperature, conditions, high and low. OK changes the place.
     private void buildWeather(int x) {
         int y = px(262);
         View card = new View(this);
-        final GradientDrawable cardBg = glass(40);
+        final GradientDrawable cardBg = glass(44);
         card.setBackground(cardBg);
         card.setFocusable(true);
-        card.setOnFocusChangeListener((v, has) -> cardBg.setStroke(px(has ? 4 : 2), has ? 0xFFFFFFFF : 0x47FFFFFF));
+        card.setOnFocusChangeListener((v, has) ->
+                cardBg.setStroke(has ? Math.max(2, px(4)) : Math.max(1, px(2)), has ? 0xFFFFFFFF : 0x47FFFFFF));
         card.setOnClickListener(v -> showCities());
-        root.addView(card, at(x, y, px(600), px(104)));
-        wxIcon[0] = new ImageView(this);
-        root.addView(wxIcon[0], at(x + px(26), y + px(20), px(64), px(64)));
-        wxTemp = text(px(62), Color.WHITE, light);
-        wxTemp.setIncludeFontPadding(false);
-        wxTemp.setText("--\u00B0");
-        root.addView(wxTemp, at(x + px(106), y + px(20), -2, -2));
-        wxCity = text(px(18), 0xCCFFFFFF, semibold);
+        root.addView(card, at(x, y, px(1050), px(318)));
+        TextView change = text(px(18), 0x99FFFFFF, regular);
+        change.setText("OK to change place");
+        change.setGravity(Gravity.END);
+        root.addView(change, at(x + px(790), y + px(40), px(220), -2));
+        wxCity = text(px(24), 0xE6FFFFFF, semibold);
         wxCity.setLetterSpacing(0.12f);
-        wxCity.setSingleLine(true);
         wxCity.setText(city()[0].toUpperCase(java.util.Locale.ROOT));
-        root.addView(wxCity, at(x + px(246), y + px(14), px(330), -2));
-        wxCond = text(px(26), Color.WHITE, semibold);
+        root.addView(wxCity, at(x + px(52), y + px(36), -2, -2));
+        wxTemp = text(px(150), Color.WHITE, light);
+        wxTemp.setIncludeFontPadding(false);
+        wxTemp.setLetterSpacing(-0.05f);
+        wxTemp.setText("--°");
+        root.addView(wxTemp, at(x + px(46), y + px(70), -2, -2));
+        wxCond = text(px(28), Color.WHITE, semibold);
         wxCond.setSingleLine(true);
-        wxCond.setText("Loading weather");
-        root.addView(wxCond, at(x + px(246), y + px(36), px(330), -2));
-        wxRange = text(px(19), 0xCCFFFFFF, regular);
+        wxCond.setText("No forecast yet");
+        root.addView(wxCond, at(x + px(52), y + px(232), px(290), -2));
+        wxRange = text(px(21), 0xCCFFFFFF, regular);
         wxRange.setSingleLine(true);
         wxRange.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        root.addView(wxRange, at(x + px(246), y + px(70), px(336), -2));
-        // The hourly row is gone; these only take the values the forecast fills in.
+        root.addView(wxRange, at(x + px(52), y + px(272), px(296), -2));
+        View div = new View(this);
+        div.setBackgroundColor(0x33FFFFFF);
+        root.addView(div, at(x + px(360), y + px(50), Math.max(1, px(2)), px(218)));
+        TextView hdr = text(px(21), 0xC7FFFFFF, semibold);
+        hdr.setLetterSpacing(0.14f);
+        hdr.setText("NEXT HOURS");
+        root.addView(hdr, at(x + px(408), y + px(44), -2, -2));
         for (int i = 0; i < 6; i++) {
-            wxHour[i] = text(px(10), 0, regular);
-            wxHourT[i] = text(px(10), 0, regular);
-            if (i > 0) wxIcon[i] = new ImageView(this);
+            int cx = x + px(408) + i * px(104);
+            wxHour[i] = text(px(23), 0xE0FFFFFF, semibold);
+            wxHour[i].setGravity(Gravity.CENTER);
+            root.addView(wxHour[i], at(cx, y + px(104), px(96), -2));
+            wxIcon[i] = new ImageView(this);
+            root.addView(wxIcon[i], at(cx + px(26), y + px(152), px(44), px(44)));
+            wxHourT[i] = text(px(28), Color.WHITE, semibold);
+            wxHourT[i].setGravity(Gravity.CENTER);
+            root.addView(wxHourT[i], at(cx, y + px(214), px(96), -2));
         }
     }
 
     // The quick controls card: brightness, volume, the picture mode and the sound mode.
     private void buildControls(int x) {
-        int y = 0, w = px(502), cx = x + px(44);
+        int y = px(262), w = px(502), cx = x + px(44);
         View card = new View(this);
-        GradientDrawable drawerBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xF21A2442, 0xF51A1C35, 0xED101B31});
-        drawerBg.setCornerRadius(px(38));
-        drawerBg.setStroke(px(2), 0x7AD6E7FF);
-        card.setBackground(drawerBg);
-        quickPanel.addView(card, at(x, y, px(590), px(382)));
+        card.setBackground(glass(44));
+        root.addView(card, at(x, y, px(590), px(318)));
         TextView hdr = text(px(20), 0xC7FFFFFF, semibold);
         hdr.setLetterSpacing(0.14f);
         hdr.setText("QUICK CONTROLS");
-        quickPanel.addView(hdr, at(cx, y + px(26), -2, -2));
+        root.addView(hdr, at(cx, y + px(26), -2, -2));
 
         TextView bl = text(px(23), Color.WHITE, semibold);
         bl.setText("Brightness");
-        quickPanel.addView(bl, at(cx, y + px(54), -2, -2));
+        root.addView(bl, at(cx, y + px(54), -2, -2));
         brightPct = text(px(23), 0xCCFFFFFF, semibold);
         brightPct.setGravity(Gravity.END);
-        quickPanel.addView(brightPct, at(cx, y + px(54), w, -2));
+        root.addView(brightPct, at(cx, y + px(54), w, -2));
         brightSlider = new Slider(this, new LineIcon(LineIcon.SUN), v -> setBrightness(v));
-        quickPanel.addView(brightSlider, at(cx, y + px(82), w, px(52)));
+        root.addView(brightSlider, at(cx, y + px(82), w, px(52)));
 
         TextView vl = text(px(23), Color.WHITE, semibold);
         vl.setText("Volume");
-        quickPanel.addView(vl, at(cx, y + px(136), -2, -2));
+        root.addView(vl, at(cx, y + px(136), -2, -2));
         volPct = text(px(23), 0xCCFFFFFF, semibold);
         volPct.setGravity(Gravity.END);
-        quickPanel.addView(volPct, at(cx, y + px(136), w, -2));
+        root.addView(volPct, at(cx, y + px(136), w, -2));
         volSlider = new Slider(this, new LineIcon(LineIcon.SOUND), v -> setVolume(v));
-        quickPanel.addView(volSlider, at(cx, y + px(164), w, px(52)));
+        root.addView(volSlider, at(cx, y + px(164), w, px(52)));
 
         // The picture mode: five chips. Hold OK on one to save the TV's current mode to it.
         int g = px(8), pn = PIC_MODES.length, pw = (w - (pn - 1) * g) / pn;
         for (int i = 0; i < pn; i++) addPicChip(PIC_MODES[i], cx + i * (pw + g), y + px(226), pw, i);
 
         // The sound mode: four chips, or one button to the TV's own sound page when this TV can't do it.
-        int cy = y + px(293);
+        int cy = y + px(274);
         soundMode = getSharedPreferences(PREFS, 0).getInt("sound", 0);
         if (!soundSupported()) {
             addChip("More sound settings", cx, cy, w, -1);
@@ -735,7 +672,7 @@ public class MainActivity extends Activity {
         t.setOnLongClickListener(v -> { learnPicture(idx); return true; });
         picChips.add(t);
         picBgs.add(bg);
-        quickPanel.addView(t, at(x, y, w, px(40)));
+        root.addView(t, at(x, y, w, px(40)));
     }
 
     // The TV's own number for a picture mode, saved by holding OK on its chip (or sent with --es picmodes).
@@ -809,7 +746,7 @@ public class MainActivity extends Activity {
         });
         chips.add(t);
         chipBgs.add(bg);
-        quickPanel.addView(t, at(x, y, w, px(40)));
+        root.addView(t, at(x, y, w, px(40)));
     }
 
     private void paintChips() {
@@ -870,30 +807,15 @@ public class MainActivity extends Activity {
             }
         } else {
             String[][] items = {{"wallpaper", "Wallpaper"}, {"add", "Add app"}, {"city", "Weather place"},
-                    {"tv", "TV settings"}, {"text", "Small text"},
-                    {"motion", motionOn ? "Motion: on" : "Motion: off"}};
-            int[][] icons = {LineIcon.PICTURE, LineIcon.PLUS, LineIcon.WIFI, LineIcon.SETTINGS, LineIcon.SETTINGS, LineIcon.SUN};
+                    {"tv", "TV settings"}, {"text", "Small text"}};
+            int[][] icons = {LineIcon.PICTURE, LineIcon.PLUS, LineIcon.WIFI, LineIcon.SETTINGS, LineIcon.SETTINGS};
             for (int i = 0; i < items.length; i++) {
                 keys.add(SET + items[i][0]);
                 labels.add(Strings.t(items[i][1]));
                 lineIcons.add(icons[i]);
             }
         }
-        if (mode != 0) {
-            w = px(240);
-            h = px(135);
-            tileW = w;
-            tileH = h;
-        }
         int n = keys.size();
-        // Many apps: shrink the tiles so up to 8 fit on the shelf without running off its edge.
-        int room = px(SHELF_W) - px(96);
-        if (mode != 0 && n > 1 && n * w + (n - 1) * g > room) {
-            w = Math.max(px(190), (room - (n - 1) * g) / n);
-            h = w * 9 / 16;
-            tileW = w;
-            tileH = h;
-        }
         int content = n * w + Math.max(0, n - 1) * g;
         rowLeft = Math.max(px(48), (px(SHELF_W) - content) / 2);
         for (int i = 0; i < n; i++) {
@@ -910,12 +832,9 @@ public class MainActivity extends Activity {
                 if (banner == null) try { icon = pm.getApplicationIcon(key); } catch (Exception ignored) {}
             }
             names.put(key, labels.get(i));
-            int tw = mode == 0 ? slotW(i) : w, th = mode == 0 ? slotH(i) : h;
-            addTile(appsRow, key, labels.get(i), banner, lineIcons.get(i), icon, gridX(i), gridY(i), tw, th);
+            addTile(appsRow, key, labels.get(i), banner, lineIcons.get(i), icon, gridX(i), gridY(i), w, h);
         }
-        shelf.setVisibility(mode == 0 ? View.GONE : View.VISIBLE);
-        appsRow.setMinimumWidth(mode == 0 ? gridX(Math.max(0, n - 1)) + slotW(Math.max(0, n - 1)) + px(OFF_X)
-                : rowLeft * 2 + content);
+        appsRow.setMinimumWidth(rowLeft * 2 + content);
 
         // The tab bar, centred at the top.
         int barLeft = (screenW - px(552)) / 2 + px(8);
@@ -925,7 +844,7 @@ public class MainActivity extends Activity {
         // Added last, so the first app keeps first focus; Up from the apps reaches them.
         List<Integer> quick = quickList();
         int ib = px(ICON_BUTTON), ig = px(ICON_GAP);
-        int count = quick.size() + 2;
+        int count = quick.size() + 1;
         int capW = count * ib + (count - 1) * ig + px(24);
         int capX = screenW - m - capW;
         FrameLayout.LayoutParams cl = (FrameLayout.LayoutParams) capsule.getLayoutParams();
@@ -933,8 +852,6 @@ public class MainActivity extends Activity {
         cl.width = capW;
         capsule.setLayoutParams(cl);
         int qx = capX + px(12);
-        addIcon("control:center", "Quick controls", new LineIcon(LineIcon.SUN), qx);
-        qx += ib + ig;
         for (int q : quick) {
             addIcon(QUICK + QUICK_NAMES[q], Strings.t(QUICK_LABELS[q]), new LineIcon(QUICK_ICONS[q]), qx);
             qx += ib + ig;
@@ -1075,7 +992,7 @@ public class MainActivity extends Activity {
             if (has) focusedKey = key;
             if (glass) bg.setColor(has ? 0x38FFFFFF : 0x13FFFFFF);
             v.animate().scaleX(has ? POP_SCALE : 1f).scaleY(has ? POP_SCALE : 1f).translationZ(has ? px(26) : 0)
-                    .setStartDelay(0).setDuration(has ? 380 : 230).setInterpolator(has ? POP : EASE).withLayer().start();
+                    .setStartDelay(0).setDuration(has ? 300 : 200).setInterpolator(has ? POP : EASE).withLayer().start();
             ring.animate().alpha(has ? 1f : 0f).setStartDelay(0).setDuration(has ? 200 : 140).start();
             if (has && !intro) sweep(shine, sw, w);
         });
@@ -1304,8 +1221,8 @@ public class MainActivity extends Activity {
             if (card == null) continue;
             View wrap = (View) card.getParent();
             boolean rest = focus < 0 || j == focus;
-            float push = rest || mode == 0 ? 0f : (j < focus ? -px(PUSH) : px(PUSH));
-            wrap.animate().translationX(push).alpha(rest ? 1f : (mode == 0 ? 0.8f : 0.62f))
+            float push = rest ? 0f : (j < focus ? -px(PUSH) : px(PUSH));
+            wrap.animate().translationX(push).alpha(rest ? 1f : 0.62f)
                     .setStartDelay(0).setDuration(280).setInterpolator(EASE).start();
         }
     }
@@ -1322,12 +1239,6 @@ public class MainActivity extends Activity {
             String key = tag instanceof String ? (String) tag : null;
             int idx = key == null ? -1 : rowApps.indexOf(key);
             rowState(idx);
-            Integer tn = key == null ? null : tints.get(key);
-            if (glowShape != null && tn != null) {
-                glowShape.setColors(new int[] {(tn & 0x00FFFFFF) | 0x70000000, tn & 0x00FFFFFF});
-                heroGlow.setAlpha(0f);
-                heroGlow.animate().alpha(1f).setDuration(450).start();
-            }
             showLabel(idx >= 0 ? names.get(key) : "");
         } catch (Exception ignored) {}
     }
@@ -1380,7 +1291,6 @@ public class MainActivity extends Activity {
 
     private void open(String key) {
         Intent i;
-        if (key.equals("control:center")) { toggleQuick(!quickOpen); return; }
         if (key.startsWith(TAB)) {
             int next = Integer.parseInt(key.substring(TAB.length()));
             if (next != mode) {
@@ -1419,8 +1329,7 @@ public class MainActivity extends Activity {
             mode = 0;
             buildTiles();
             showAddMenu(-1);
-        } else if (name.equals("motion")) toggleMotion();
-        else if (name.equals("city")) showCities();
+        } else if (name.equals("city")) showCities();
         else if (name.equals("text")) editCredit();
         else try { startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
         catch (Exception ignored) {}
@@ -1776,33 +1685,12 @@ public class MainActivity extends Activity {
     }
 
     // Where app number i sits in the sideways row.
-    // On the apps page: app 0 is the big card (two cells wide and high), apps 1 and 2 sit under it,
-    // and the rest fill three rows of small cards, column by column, to the right.
-    private int cellCol(int i) {
-        if (i < 3) return i - 1;
-        return 2 + (i - 3) / 3;
-    }
-
-    private int cellRow(int i) {
-        return i < 3 ? 2 : (i - 3) % 3;
-    }
-
-    private int slotW(int i) {
-        return px(i == 0 ? 2 * U_W + U_GAP : U_W);
-    }
-
-    private int slotH(int i) {
-        return px(i == 0 ? 2 * U_H + U_GAP : U_H);
-    }
-
     private int gridX(int i) {
-        if (mode == 0) return px(OFF_X) + (i == 0 ? 0 : cellCol(i) * px(U_W + U_GAP));
         return rowLeft + i * (tileW + px(TILE_GAP));
     }
 
     private int gridY(int i) {
-        if (mode == 0) return px(OFF_Y) + (i == 0 ? 0 : cellRow(i) * px(U_H + U_GAP));
-        return (px(ROW_H) - tileH) / 2;
+        return px(TILE_IN);
     }
 
     private View tile(String key) {
@@ -1828,7 +1716,7 @@ public class MainActivity extends Activity {
                 : 0; // one row now: up and down stay put while moving
         if (step != 0) {
             int from = rowApps.indexOf(key), to = from + step;
-            if (down && to >= (mode == 0 ? 1 : 0) && from >= (mode == 0 ? 1 : 0) && to < rowApps.size()) {
+            if (down && to >= 0 && to < rowApps.size()) {
                 // Slide the tiles into their new places: no rebuild, so it stays quick on slow TVs.
                 rowApps.add(to, rowApps.remove(from));
                 for (int i = Math.min(from, to); i <= Math.max(from, to); i++) {
@@ -2427,123 +2315,5 @@ public class MainActivity extends Activity {
         @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
         @Override public int getIntrinsicWidth() { return 100; }
         @Override public int getIntrinsicHeight() { return 100; }
-    }
-
-    private void toggleMotion() {
-        motionOn = !motionOn;
-        getSharedPreferences(PREFS, 0).edit().putBoolean("motion", motionOn).apply();
-        if (scene != null) scene.run(motionOn);
-        buildTiles();
-    }
-
-    // The moving part of a wallpaper: three huge soft lights that drift, and a little weather of
-    // particles (stars, embers, bubbles or snow). It draws about 24 times a second while Home is on
-    // screen and not at all otherwise. Motion can be switched off in Settings.
-    private final class Scene extends View {
-        private final Bitmap[] blobs = new Bitmap[3];
-        private int kind;
-        private boolean running;
-        private final long t0 = System.nanoTime();
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        private final RectF dst = new RectF();
-        private final float[] fx = new float[70], fy = new float[70], fs = new float[70],
-                fv = new float[70], fp = new float[70];
-
-        Scene(Context c) {
-            super(c);
-            java.util.Random r = new java.util.Random(7);
-            for (int i = 0; i < 70; i++) {
-                fx[i] = r.nextFloat();
-                fy[i] = r.nextFloat();
-                fs[i] = r.nextFloat();
-                fv[i] = 0.4f + r.nextFloat();
-                fp[i] = r.nextFloat() * 6.2832f;
-            }
-        }
-
-        void setTheme(int[] m) {
-            boolean had = blobs[0] != null;
-            for (int i = 0; i < 3; i++) {
-                Bitmap b = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888);
-                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-                p.setShader(new RadialGradient(48, 48, 48, m[i], m[i] & 0x00FFFFFF, Shader.TileMode.CLAMP));
-                new Canvas(b).drawCircle(48, 48, 48, p);
-                blobs[i] = b; // the old one is left to the garbage collector: the renderer may still hold it
-            }
-            kind = m[3];
-            if (had) {
-                animate().cancel();
-                setAlpha(0f);
-                animate().alpha(1f).setDuration(700).start();
-            }
-            invalidate();
-        }
-
-        void run(boolean on) {
-            if (on && !running) {
-                running = true;
-                invalidate();
-            } else if (!on) {
-                running = false;
-            }
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            running = false;
-            super.onDetachedFromWindow();
-        }
-
-        @Override
-        protected void onDraw(Canvas cv) {
-            float w = getWidth(), h = getHeight(), sc = w / 1920f;
-            float t = (System.nanoTime() - t0) / 1e9f;
-            paint.setStyle(Paint.Style.FILL);
-            paint.setAlpha(255);
-            for (int i = 0; i < 3; i++) {
-                if (blobs[i] == null) continue;
-                float r = h * (0.62f + 0.08f * (float) Math.sin(t * 0.21f + i * 2.1f));
-                float cx = w * (0.2f + 0.3f * i) + w * 0.12f * (float) Math.sin(t * (0.07f + 0.02f * i) + i * 1.7f);
-                float cy = h * (0.30f + 0.22f * (i % 2)) + h * 0.10f * (float) Math.cos(t * (0.06f + 0.025f * i) + i);
-                dst.set(cx - r, cy - r, cx + r, cy + r);
-                cv.drawBitmap(blobs[i], null, dst, paint);
-            }
-            if (kind == 1) {
-                paint.setStyle(Paint.Style.FILL);
-                for (int i = 0; i < 70; i++) {
-                    float tw = 0.5f + 0.5f * (float) Math.sin(t * (0.6f + fv[i]) + fp[i]);
-                    paint.setColor(0xFFFFFFFF);
-                    paint.setAlpha((int) (255 * (0.15f + 0.8f * tw * (0.4f + 0.6f * fs[i]))));
-                    cv.drawCircle(fx[i] * w, fy[i] * h * 0.62f, (1.2f + 2.2f * fs[i]) * sc, paint);
-                }
-            } else if (kind != 0) {
-                int n = kind == 4 ? 45 : kind == 3 ? 18 : 30;
-                float speed = kind == 4 ? 0.03f : 0.02f;
-                for (int i = 0; i < n; i++) {
-                    float p = (t * speed * fv[i] + fp[i]) % 1f;
-                    float a = (float) Math.sin(Math.PI * p);
-                    float x = fx[i] * w + (float) Math.sin(t * 0.5f * fv[i] + fp[i]) * 30f * sc;
-                    float y = kind == 4 ? h * (-0.05f + 1.1f * p) : h * (1.05f - 1.1f * p);
-                    if (kind == 2) {
-                        paint.setStyle(Paint.Style.FILL);
-                        paint.setColor(0xFFFFDCA0);
-                        paint.setAlpha((int) (200 * a));
-                        cv.drawCircle(x, y, (2f + 3.5f * fs[i]) * sc, paint);
-                    } else if (kind == 3) {
-                        paint.setStyle(Paint.Style.STROKE);
-                        paint.setStrokeWidth(2f * sc);
-                        paint.setColor(0xFFD8F6FF);
-                        paint.setAlpha((int) (120 * a));
-                        cv.drawCircle(x, y, (7f + 16f * fs[i]) * sc, paint);
-                    } else {
-                        paint.setStyle(Paint.Style.FILL);
-                        paint.setColor(0xFFFFFFFF);
-                        paint.setAlpha((int) (190 * a));
-                        cv.drawCircle(x, y, (1.6f + 2.6f * fs[i]) * sc, paint);
-                    }
-                }
-            }
-            if (running) postInvalidateDelayed(42);
-        }
     }
 }
