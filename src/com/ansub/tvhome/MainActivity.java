@@ -115,8 +115,10 @@ public class MainActivity extends Activity {
     // The apps sit in one row, centred on a glass shelf. Tile size and gap, where the shelf sits and how
     // big it is, how far down inside it the tiles start, and how far the others slide from the focused one.
     private static final int TILE_W = 300, TILE_H = 169, TILE_GAP = 30;
-    private static final int ROW_TOP = 420, ROW_H = 360, SHELF_W = 1800, SHELF_X = 60, TILE_IN = 95, PUSH = 28;
-    private static final float POP_SCALE = 1.14f; // how much bigger the focused app grows
+    private static final int ROW_TOP = 400, ROW_H = 600, SHELF_W = 1780, SHELF_X = 70, TILE_IN = 95, PUSH = 28;
+    // Apps page (a mosaic): the first app is a big card, the rest are small cards, all about 16:9.
+    private static final int U_W = 285, U_H = 160, U_GAP = 30, OFF_X = 30, OFF_Y = 30;
+    private static final float POP_SCALE = 1.08f; // how much bigger the focused app grows
     private static final int ICON_TOP = 68, ICON_BUTTON = 64, ICON_SIZE = 34, ICON_GAP = 8; // top right
     // The tab bar at the top: what the shelf shows.
     private static final String TAB = "tab:", SET = "set:";
@@ -193,7 +195,8 @@ public class MainActivity extends Activity {
     private int mode;        // the tab: 0 Apps, 1 Inputs, 2 Settings
     private int rowLeft;     // where the first tile sits inside the shelf (the row is centred)
     private FrameLayout quickPanel;
-    private View heroGlow;
+    private View heroGlow, shelf;
+    private GradientDrawable glowShape;
     private boolean quickOpen;
     private Scene scene;      // the moving part of the wallpaper
     private boolean motionOn = true;
@@ -279,7 +282,7 @@ public class MainActivity extends Activity {
         moveHint = text(px(22), 0xCCFFFFFF, regular);
         moveHint.setText(Strings.t("Use the arrows to move it, then press OK"));
         moveHint.setVisibility(View.GONE);
-        root.addView(moveHint, at(px(SHELF_X + 40), px(386), -2, -2));
+        root.addView(moveHint, at(px(760), px(352), -2, -2));
 
         buildChrome();
         scene.setTheme(MOTION[wallpaper()]);
@@ -544,6 +547,15 @@ public class MainActivity extends Activity {
         int m = px(MARGIN), cw = px(SHELF_W), sx = px(SHELF_X);
         scene = new Scene(this);
         root.addView(scene, 0, at(0, 0, screenW, px(1080)));
+        // A big soft glow behind the shelf that takes the colour of the selected app.
+        glowShape = new GradientDrawable();
+        glowShape.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        glowShape.setGradientRadius(px(760));
+        glowShape.setGradientCenter(0.5f, 0.5f);
+        glowShape.setColors(new int[] {0x00000000, 0x00000000});
+        heroGlow = new View(this);
+        heroGlow.setBackground(glowShape);
+        root.addView(heroGlow, 1, at(px(160), px(ROW_TOP) - px(260), px(1600), px(800)));
         View nav = new View(this);
         nav.setBackground(glass(40));
         root.addView(nav, at((screenW - px(552)) / 2, px(64), px(552), px(72)));
@@ -552,15 +564,15 @@ public class MainActivity extends Activity {
         root.addView(capsule, at(0, px(62), px(100), px(76)));
 
         buildWeather(m);
-        View shelf = new View(this);
+        shelf = new View(this);
         shelf.setBackground(glass(48));
         root.addView(shelf, at(sx, px(ROW_TOP), cw, px(ROW_H)));
         sectionLabel = text(px(20), 0x9EFFFFFF, semibold);
         countText = text(px(20), 0x9EFFFFFF, semibold);
-        nameText = text(px(28), 0xF2FFFFFF, semibold);
+        nameText = text(px(40), 0xF2FFFFFF, semibold);
         nameText.setSingleLine(true);
-        nameText.setGravity(Gravity.CENTER);
-        root.addView(nameText, at(sx, px(ROW_TOP + 292), cw, -2));
+        nameText.setGravity(Gravity.END);
+        root.addView(nameText, at(px(760), px(ROW_TOP - 110), px(1060), -2));
         appsScroll = new HorizontalScrollView(this);
         appsScroll.setHorizontalScrollBarEnabled(false);
         appsScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -874,6 +886,14 @@ public class MainActivity extends Activity {
             tileH = h;
         }
         int n = keys.size();
+        // Many apps: shrink the tiles so up to 8 fit on the shelf without running off its edge.
+        int room = px(SHELF_W) - px(96);
+        if (mode != 0 && n > 1 && n * w + (n - 1) * g > room) {
+            w = Math.max(px(190), (room - (n - 1) * g) / n);
+            h = w * 9 / 16;
+            tileW = w;
+            tileH = h;
+        }
         int content = n * w + Math.max(0, n - 1) * g;
         rowLeft = Math.max(px(48), (px(SHELF_W) - content) / 2);
         for (int i = 0; i < n; i++) {
@@ -890,9 +910,12 @@ public class MainActivity extends Activity {
                 if (banner == null) try { icon = pm.getApplicationIcon(key); } catch (Exception ignored) {}
             }
             names.put(key, labels.get(i));
-            addTile(appsRow, key, labels.get(i), banner, lineIcons.get(i), icon, gridX(i), gridY(i), w, h);
+            int tw = mode == 0 ? slotW(i) : w, th = mode == 0 ? slotH(i) : h;
+            addTile(appsRow, key, labels.get(i), banner, lineIcons.get(i), icon, gridX(i), gridY(i), tw, th);
         }
-        appsRow.setMinimumWidth(rowLeft * 2 + content);
+        shelf.setVisibility(mode == 0 ? View.GONE : View.VISIBLE);
+        appsRow.setMinimumWidth(mode == 0 ? gridX(Math.max(0, n - 1)) + slotW(Math.max(0, n - 1)) + px(OFF_X)
+                : rowLeft * 2 + content);
 
         // The tab bar, centred at the top.
         int barLeft = (screenW - px(552)) / 2 + px(8);
@@ -1281,8 +1304,8 @@ public class MainActivity extends Activity {
             if (card == null) continue;
             View wrap = (View) card.getParent();
             boolean rest = focus < 0 || j == focus;
-            float push = rest ? 0f : (j < focus ? -px(PUSH) : px(PUSH));
-            wrap.animate().translationX(push).alpha(rest ? 1f : 0.62f)
+            float push = rest || mode == 0 ? 0f : (j < focus ? -px(PUSH) : px(PUSH));
+            wrap.animate().translationX(push).alpha(rest ? 1f : (mode == 0 ? 0.8f : 0.62f))
                     .setStartDelay(0).setDuration(280).setInterpolator(EASE).start();
         }
     }
@@ -1299,6 +1322,12 @@ public class MainActivity extends Activity {
             String key = tag instanceof String ? (String) tag : null;
             int idx = key == null ? -1 : rowApps.indexOf(key);
             rowState(idx);
+            Integer tn = key == null ? null : tints.get(key);
+            if (glowShape != null && tn != null) {
+                glowShape.setColors(new int[] {(tn & 0x00FFFFFF) | 0x70000000, tn & 0x00FFFFFF});
+                heroGlow.setAlpha(0f);
+                heroGlow.animate().alpha(1f).setDuration(450).start();
+            }
             showLabel(idx >= 0 ? names.get(key) : "");
         } catch (Exception ignored) {}
     }
@@ -1747,11 +1776,32 @@ public class MainActivity extends Activity {
     }
 
     // Where app number i sits in the sideways row.
+    // On the apps page: app 0 is the big card (two cells wide and high), apps 1 and 2 sit under it,
+    // and the rest fill three rows of small cards, column by column, to the right.
+    private int cellCol(int i) {
+        if (i < 3) return i - 1;
+        return 2 + (i - 3) / 3;
+    }
+
+    private int cellRow(int i) {
+        return i < 3 ? 2 : (i - 3) % 3;
+    }
+
+    private int slotW(int i) {
+        return px(i == 0 ? 2 * U_W + U_GAP : U_W);
+    }
+
+    private int slotH(int i) {
+        return px(i == 0 ? 2 * U_H + U_GAP : U_H);
+    }
+
     private int gridX(int i) {
+        if (mode == 0) return px(OFF_X) + (i == 0 ? 0 : cellCol(i) * px(U_W + U_GAP));
         return rowLeft + i * (tileW + px(TILE_GAP));
     }
 
     private int gridY(int i) {
+        if (mode == 0) return px(OFF_Y) + (i == 0 ? 0 : cellRow(i) * px(U_H + U_GAP));
         return (px(ROW_H) - tileH) / 2;
     }
 
@@ -1778,7 +1828,7 @@ public class MainActivity extends Activity {
                 : 0; // one row now: up and down stay put while moving
         if (step != 0) {
             int from = rowApps.indexOf(key), to = from + step;
-            if (down && to >= 0 && to < rowApps.size()) {
+            if (down && to >= (mode == 0 ? 1 : 0) && from >= (mode == 0 ? 1 : 0) && to < rowApps.size()) {
                 // Slide the tiles into their new places: no rebuild, so it stays quick on slow TVs.
                 rowApps.add(to, rowApps.remove(from));
                 for (int i = Math.min(from, to); i <= Math.max(from, to); i++) {
